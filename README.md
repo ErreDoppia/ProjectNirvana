@@ -1,5 +1,5 @@
 project_nirvana
-└──waterfall_engine/
+└── waterfall_engine/
 │   ├── __init__.py
 │   ├── engine.py
 │   ├── fees.py
@@ -8,6 +8,6 @@ project_nirvana
 │   ├── settings.py
 │   └── tranche.py
 │   
-├──main.py
+├── main.py
 ├── test_engine.py
-└──README.md
+└── README.md
