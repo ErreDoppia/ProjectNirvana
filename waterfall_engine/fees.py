@@ -1,4 +1,5 @@
 
+from typing import cast
 from .models import RevenueWaterfallLimb, RevenuePaymentRunResult
 from .settings import FREQ_MULTIPLIER
 
@@ -19,13 +20,12 @@ class Fee(RevenueWaterfallLimb):
 
         if fee_config.get('type') not in ['dollar_amount', 'percentage']:
             raise ValueError('Invalid fee config')
-        else:
-            self.fee_config = fee_config
+
+        self.fee_config = fee_config
 
         if payment_frequency not in ['M', 'Q', 'S', 'Y']:
             raise ValueError('Invalid payment frequency')
-        else:
-            self.payment_frequency = payment_frequency
+        self.payment_frequency = payment_frequency
 
         self.annual = annual
         self.payment_periods = payment_periods
@@ -76,6 +76,19 @@ class Fee(RevenueWaterfallLimb):
             'revenue_amount_unpaid' : unpaid,
         }
                
-        self.history.append([paid, unpaid])
+        self.update_history(period, pool_balance, paid, unpaid)
 
         return payment_run_return_payload
+    
+    def update_history(self, period: int, pool_balance: float, paid: float, unpaid: float):
+
+        due = self.amount_due(pool_balance, period)
+
+        self.history.append(
+            {
+                'period': period, 
+                'amount_due': due,
+                'amount_paid': paid, 
+                'amount_unpaid': unpaid
+            }
+        )
