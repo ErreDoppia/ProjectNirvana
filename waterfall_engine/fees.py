@@ -7,10 +7,7 @@ from .settings import FREQ_MULTIPLIER
 
 ### FEE ###
 class Fee(RevenueWaterfallLimb):
-    def __init__(self, name: str, fee_config: dict, 
-                 payment_frequency: str, annual: bool = False, 
-                 payment_periods=None):
-        """
+    """
         Parameters
         ----------
         name : str
@@ -25,6 +22,10 @@ class Fee(RevenueWaterfallLimb):
             Specific periods when the fee is due. If None, applies every period.    
 
         """
+    def __init__(self, name: str, fee_config: dict, 
+                 payment_frequency: str, annual: bool = False, 
+                 payment_periods=None):
+        
         self._name = name
 
         if fee_config.get('type') not in ['dollar_amount', 'percentage']:
@@ -70,8 +71,8 @@ class Fee(RevenueWaterfallLimb):
         """
         Applies payment and tracks unpaid portion.
         """
-        available_revenue_funds = payment_context.get('available_revenue_collections',0.0)
-        pool_balance = payment_context.get('pool_balance', 0.0)
+        available_revenue_funds = payment_context.available_revenue_collections
+        pool_balance = payment_context.pool_balance
 
         due = self.amount_due(pool_balance, period)
         paid = min(available_revenue_funds, due)

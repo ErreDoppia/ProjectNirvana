@@ -2,6 +2,7 @@
 
 import unittest
 from waterfall_engine.fees import Fee
+from waterfall_engine.models import PaymentContext
 
 
 class TestFeeAmountsDue(unittest.TestCase):
@@ -140,10 +141,9 @@ class TestFeeDistribution(unittest.TestCase):
         Test the distribution of fee payments over multiple periods and verify history.
         """
         payment_context = [
-            {'pool_balance': 10e6, 'available_revenue_collections': 10000.0},
-            {'pool_balance': 10e6, 'available_revenue_collections': 10000.0},
-            {'pool_balance': 10e6, 'available_revenue_collections': 500.0},
-            {'pool_balance': 10e6, 'available_revenue_collections': 10000.0}
+            PaymentContext(available_revenue_collections=10000.0, available_redemption_collections=0.0, pool_balance=10e6),
+            PaymentContext(available_revenue_collections=500.0, available_redemption_collections=0.0, pool_balance=10e6),
+            PaymentContext(available_revenue_collections=10000.0, available_redemption_collections=0.0, pool_balance=10e6)
         ]
         
         expected_history = []
@@ -153,7 +153,7 @@ class TestFeeDistribution(unittest.TestCase):
             self.fee.distribute_due(context, i)
 
             due = 1e3
-            paid = min(context['available_revenue_collections'], due)
+            paid = min(context.available_revenue_collections, due)
             unpaid = due - paid
 
             expected_history.append({
@@ -175,7 +175,7 @@ class TestFeeDistribution(unittest.TestCase):
         """
         Test fee distribution when no funds are available.
         """
-        payment_context = {'pool_balance': 10e6, 'available_revenue_collections': 0.0}
+        payment_context = PaymentContext(pool_balance=10e6, available_revenue_collections=0.0, available_redemption_collections=0.0)
         period = 1
 
         result = self.fee.distribute_due(payment_context, period)
@@ -200,7 +200,7 @@ class TestFeeDistribution(unittest.TestCase):
             payment_periods=[1, 3]  # Only due in periods 1 and 3
         )
 
-        payment_context = {'pool_balance': 10e6, 'available_revenue_collections': 10000.0}
+        payment_context = PaymentContext(pool_balance=10e6, available_revenue_collections=10000.0, available_redemption_collections=0.0)
 
         # Period 1 should distribute
         result_period_1 = fee.distribute_due(payment_context, 1)

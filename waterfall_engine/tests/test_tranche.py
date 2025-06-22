@@ -1,6 +1,7 @@
 
 import unittest
 from waterfall_engine.tranche import Tranche, RedemptionProcessor
+from waterfall_engine.models import PaymentContext
 
 
 class TestInterestCalcs(unittest.TestCase):
@@ -168,7 +169,8 @@ class TestTrancheIntegration(unittest.TestCase):
             maturity=60, 
             payment_frequency='Q', 
             step_up_margin=0.1,
-        step_up_date=36)
+            step_up_date=36
+        )
 
     def test_repayment_runs(self):
         """
@@ -178,9 +180,9 @@ class TestTrancheIntegration(unittest.TestCase):
         
         # Simulated payment context for 3 periods
         payment_context = [
-            {'available_redemption_collections': 5e6},
-            {'available_redemption_collections': 2.5e6},
-            {'available_redemption_collections': 2.5e6}
+            PaymentContext(available_redemption_collections=5e6, available_revenue_collections=0.0, pool_balance=10e6, principal_allocations={"test_tranche": 5e6}),
+            PaymentContext(available_redemption_collections=2.5e6, available_revenue_collections=0.0, pool_balance=10e6, principal_allocations={"test_tranche": 2.5e6}),
+            PaymentContext(available_redemption_collections=2.5e6, available_revenue_collections=0.0, pool_balance=10e6, principal_allocations={"test_tranche": 2.5e6})
         ]
         
         initial_balance = 10e6
@@ -195,18 +197,18 @@ class TestTrancheIntegration(unittest.TestCase):
             exp_history = {
                 'period': i,
                 'last_period_ending_balance': initial_balance,
-                'current_period_repayments': pmt_cntx.get('available_redemption_collections'),
-                'current_period_ending_balance': initial_balance - pmt_cntx.get('available_redemption_collections')
+                'current_period_repayments': pmt_cntx.available_redemption_collections,
+                'current_period_ending_balance': initial_balance - pmt_cntx.available_redemption_collections
             }
             expected.append(exp_history)
 
             # Update balance for next iteration
-            initial_balance -= pmt_cntx.get('available_redemption_collections')
+            initial_balance -= pmt_cntx.available_redemption_collections
 
         result = self.tranche.history_principal
 
         # Ensure ending balance = 0.0
-        self.assertAlmostEqual(0.0, result[-1].get('current_period_ending_balance'))
+        self.assertAlmostEqual(0.0, result[-1].get('current_period_ending_balance'), msg=result)
 
         # Ensure the lengths match
         self.assertEqual(len(expected), len(result))
@@ -224,9 +226,9 @@ class TestTrancheIntegration(unittest.TestCase):
         """
         # Simulated payment context for 3 periods
         payment_context = [
-            {'available_revenue_collections': 200e3},
-            {'available_revenue_collections': 100e3},
-            {'available_revenue_collections': 500e3}
+            PaymentContext(available_revenue_collections=200e3, available_redemption_collections=0.0, pool_balance=10e6),
+            PaymentContext(available_revenue_collections=100e3, available_redemption_collections=0.0, pool_balance=10e6),
+            PaymentContext(available_revenue_collections=500e3, available_redemption_collections=0.0, pool_balance=10e6)
         ]
 
         due = round ( 10e6 * (0.06 + 0.02) / 4 , 2 )
@@ -253,8 +255,8 @@ class TestTrancheIntegration(unittest.TestCase):
                 'last_period_unpaid_interest': last_unp,
                 'interest_on_last_period_unpaid_interest': int_on_last_unp_unt,
                 'total_interest_due': tot_int_due, 
-                'current_period_distribution': min(tot_int_due, pmt_cntx.get('available_revenue_collections')), 
-                'current_period_unpaid_interest': max(tot_int_due - pmt_cntx.get('available_revenue_collections'),0)
+                'current_period_distribution': min(tot_int_due, pmt_cntx.available_revenue_collections), 
+                'current_period_unpaid_interest': max(tot_int_due - pmt_cntx.available_revenue_collections, 0)
             })
 
             expected.append(exp_history)

@@ -8,6 +8,38 @@ from .models import PaymentContext
 
 ### TRANCHE CLASS ###
 class Tranche:
+    """
+    A debt tranche that tracks interest and principal cash flows over time
+    within a waterfall structure.
+    Parameters
+    ----------      
+    name : str
+        Name of the tranche.
+    initial_balance : float
+        Initial principal balance of the tranche.   
+    reference_rate : float
+        Reference rate (e.g. LIBOR, SOFR) for interest calculations.
+    margin : float
+        Margin added to the reference rate for total interest rate.         
+    maturity : int
+        Maturity period in months.
+    payment_frequency : str
+        Frequency of interest payments (e.g. 'M' for monthly, 'Q' for quarterly).
+    trigger_default_on_missed_payment : bool
+        Whether to trigger default if interest payment is missed.
+    write_off_unpaid_interest : bool
+        Whether to write off unpaid interest instead of carrying it forward.
+    interest_on_unpaid_interest : bool
+        Whether to accrue interest on unpaid interest from previous periods.
+    step_up_margin : float
+        Additional margin to apply after step-up date.
+    step_up_date : int
+        Period after which step-up margin applies (e.g. month number).
+    method : str
+        Method for interest calculation (e.g. 'act/360', '30/360').
+    repayment_structure : str
+        Structure for principal repayments ('sequential' or 'pro-rata').
+    """
     def __init__(
             self, 
             name: str, 
@@ -24,39 +56,6 @@ class Tranche:
             method: str = None, #TODO: implement improved method for interest calculation, i.e. 'act/360' or '30/360'
             repayment_structure: str = 'sequential',
             ):
-        
-        """
-        A debt tranche that tracks interest and principal cash flows over time
-        within a waterfall structure.
-        Parameters
-        ----------      
-        name : str
-            Name of the tranche.
-        initial_balance : float
-            Initial principal balance of the tranche.   
-        reference_rate : float
-            Reference rate (e.g. LIBOR, SOFR) for interest calculations.
-        margin : float
-            Margin added to the reference rate for total interest rate.         
-        maturity : int
-            Maturity period in months.
-        payment_frequency : str
-            Frequency of interest payments (e.g. 'M' for monthly, 'Q' for quarterly).
-        trigger_default_on_missed_payment : bool
-            Whether to trigger default if interest payment is missed.
-        write_off_unpaid_interest : bool
-            Whether to write off unpaid interest instead of carrying it forward.
-        interest_on_unpaid_interest : bool
-            Whether to accrue interest on unpaid interest from previous periods.
-        step_up_margin : float
-            Additional margin to apply after step-up date.
-        step_up_date : int
-            Period after which step-up margin applies (e.g. month number).
-        method : str
-            Method for interest calculation (e.g. 'act/360', '30/360').
-        repayment_structure : str
-            Structure for principal repayments ('sequential' or 'pro-rata').
-        """
 
         self._name = name
 
@@ -81,6 +80,10 @@ class Tranche:
         self.step_up_date = step_up_date
         self.method = method
 
+        # TODO: THINK ABOUT REPAYMENT STRUCTURE FOR A CLASS. IF 
+        # SEQUENTIAL VS PRO-RATA IS HANDLED IN THE DEAL, THIS CAN BE REMOVED
+        # HOWEVER, THIS MAY STILL BE USEFUL TO IMPLEMENT REDEMPTIONS IN 
+        # THE REVENUE WATERFALL
         if repayment_structure not in ['sequential', 'pro-rata']:
             raise ValueError('Invalid repayment structure')
         self.repayment_structure = repayment_structure
@@ -169,7 +172,7 @@ class Tranche:
         Interest due this period based on ending balance.
         """
         multiplier = FREQ_MULTIPLIER.get(self.payment_frequency)
-        due = self.current_all_in_rate(period) * self.last_period_ending_balance / multiplier  
+        due = round(self.current_all_in_rate(period) * self.last_period_ending_balance / multiplier, 2)
         return due
     
     def current_total_interest_due(self, period: int) -> float:
@@ -178,10 +181,10 @@ class Tranche:
         """
         due = self.current_interest_due(period)
         arrears = self.last_period_unpaid_interest
-        int_on_arrears = self.current_interest_on_last_period_unpaid_interest(period)
-        return due + arrears + int_on_arrears      
-    
-    
+        int_on_arrears = round(self.current_interest_on_last_period_unpaid_interest(period), 2)
+        return due + arrears + int_on_arrears
+
+
     def update_history_interest(self, period: int, paid: float, unpaid: float):
         """Stores interest history for analysis or reporting."""
         due = self.current_interest_due(period)
@@ -231,8 +234,8 @@ class Tranche:
         """
         Pays interest due.
         """
-        available_revenue_funds = payment_context.get('available_revenue_collections',0.0)
-        pool_balance = payment_context.get('pool_balance', 0.0)
+        available_revenue_funds = payment_context.available_revenue_collections
+        pool_balance = payment_context.pool_balance
 
         interest_due = self.current_total_interest_due(period)    
         revenue_funds_distributed = min(interest_due, available_revenue_funds)
@@ -253,9 +256,9 @@ class Tranche:
         """
         Pays principal due.
         """
-        available_redemption_funds = payment_context.get('available_redemption_collections',0.0)
+        available_redemption_funds = payment_context.available_redemption_collections
         
-        principal_due = 0.0 #from the paymetn context TODO: IMPLEMENT PAYMENT CONTEXT PROPERLY
+        principal_due = payment_context.principal_allocations.get(self.name, 0.0)
         redemption_funds_distributed = min(principal_due, available_redemption_funds)
         redemption_amount_unpaid = self.last_period_ending_balance - redemption_funds_distributed
         

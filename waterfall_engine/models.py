@@ -1,6 +1,7 @@
 
 from abc import ABC, abstractmethod
-from typing import TypedDict
+from dataclasses import dataclass, field
+from typing import TypedDict, Dict
 
 
 
@@ -14,11 +15,12 @@ class RedemptionPaymentRunResult(TypedDict):
     redemption_amount_unpaid: float
 
 ### PAYMENT CONTEXT ###
-class PaymentContext(TypedDict):
+@dataclass
+class PaymentContext:
     available_revenue_collections: float
     available_redemption_collections: float
     pool_balance: float
-    period: int
+    principal_allocations: Dict[str, float] = field(default_factory=dict)
 
 ### BASE ABSTRACT INTERFACES ###
 class RevenueWaterfallLimb(ABC):
