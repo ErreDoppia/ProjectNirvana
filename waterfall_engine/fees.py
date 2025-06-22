@@ -1,9 +1,11 @@
 
 from typing import cast
 from .models import RevenueWaterfallLimb, RevenuePaymentRunResult
+from .models import PaymentContext
 from .settings import FREQ_MULTIPLIER
 
-# Represents a fixed or percentage-based fee in the waterfall
+
+### FEE ###
 class Fee(RevenueWaterfallLimb):
     def __init__(self, name: str, fee_config: dict, 
                  payment_frequency: str, annual: bool = False, 
@@ -15,6 +17,13 @@ class Fee(RevenueWaterfallLimb):
             Name of the fee.
         fee_config : dict
             Configuration of the fee (e.g., fixed amount, annual percentage).
+        payment_frequency : str
+            Frequency of payments (e.g., 'M' for monthly, 'Q' for quarterly).
+        annual : bool
+            Whether the fee is annual or not.
+        payment_periods : list[int] | None
+            Specific periods when the fee is due. If None, applies every period.    
+
         """
         self._name = name
 
@@ -57,7 +66,7 @@ class Fee(RevenueWaterfallLimb):
         else:
             return dollar_amount_due
     
-    def distribute_due(self, payment_context: dict, period: int) -> RevenuePaymentRunResult: 
+    def distribute_due(self, payment_context: PaymentContext, period: int) -> RevenuePaymentRunResult: 
         """
         Applies payment and tracks unpaid portion.
         """
@@ -78,7 +87,7 @@ class Fee(RevenueWaterfallLimb):
                
         self.update_history(period, pool_balance, paid, unpaid)
 
-        return payment_run_return_payload
+        return cast(RevenuePaymentRunResult, payment_run_return_payload)
     
     def update_history(self, period: int, pool_balance: float, paid: float, unpaid: float):
 

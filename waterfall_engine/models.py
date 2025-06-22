@@ -3,7 +3,24 @@ from abc import ABC, abstractmethod
 from typing import TypedDict
 
 
-### Base abstract interfaces ###
+
+### RESULT DATA STRUCTURES ###
+class RevenuePaymentRunResult(TypedDict):
+    revenue_funds_distributed: float
+    revenue_amount_unpaid: float
+
+class RedemptionPaymentRunResult(TypedDict):
+    redemption_funds_distributed: float
+    redemption_amount_unpaid: float
+
+### PAYMENT CONTEXT ###
+class PaymentContext(TypedDict):
+    available_revenue_collections: float
+    available_redemption_collections: float
+    pool_balance: float
+    period: int
+
+### BASE ABSTRACT INTERFACES ###
 class RevenueWaterfallLimb(ABC):
     """
     Abstract base class representing a limb in the revenue waterfall.
@@ -11,7 +28,7 @@ class RevenueWaterfallLimb(ABC):
     """
     
     @abstractmethod
-    def distribute_due(self, *args, **kwargs) -> float:
+    def distribute_due(self, *args, **kwargs) -> RevenuePaymentRunResult:
         """
         Processes the payment due for this limb in a given period.
         """
@@ -33,7 +50,7 @@ class RedemptionWaterfallLimb(ABC):
     """
     
     @abstractmethod
-    def distribute_principal_due(self, *args, **kwargs) -> float:
+    def distribute_principal_due(self, *args, **kwargs) -> RedemptionPaymentRunResult:
         """
         Processes the payment due for this limb in a given period.
         """
@@ -46,11 +63,3 @@ class RedemptionWaterfallLimb(ABC):
         Returns the name identifier of the limb.
         """
 
-### Result data structures ###
-class RevenuePaymentRunResult(TypedDict):
-    revenue_funds_distributed: float
-    revenue_amount_unpaid: float
-
-class RedemptionPaymentRunResult(TypedDict):
-    redemption_funds_distributed: float
-    redemption_amount_unpaid: float

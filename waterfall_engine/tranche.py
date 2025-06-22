@@ -1,10 +1,12 @@
 
+
+from typing import cast
 from .settings import FREQ_MULTIPLIER
 from .models import RevenueWaterfallLimb, RedemptionWaterfallLimb
 from .models import RevenuePaymentRunResult, RedemptionPaymentRunResult
+from .models import PaymentContext
 
-
-# Represents a Tranche in the capital structure, receiving interest and principal
+### TRANCHE CLASS ###
 class Tranche:
     def __init__(
             self, 
@@ -18,14 +20,42 @@ class Tranche:
             write_off_unpaid_interest: bool = False,
             interest_on_unpaid_interest: bool = True,
             step_up_margin: float = 0.0, 
-            step_up_date: float = None,
-            method: str = None,
+            step_up_date: int = None,
+            method: str = None, #TODO: implement improved method for interest calculation, i.e. 'act/360' or '30/360'
             repayment_structure: str = 'sequential',
             ):
         
         """
         A debt tranche that tracks interest and principal cash flows over time
         within a waterfall structure.
+        Parameters
+        ----------      
+        name : str
+            Name of the tranche.
+        initial_balance : float
+            Initial principal balance of the tranche.   
+        reference_rate : float
+            Reference rate (e.g. LIBOR, SOFR) for interest calculations.
+        margin : float
+            Margin added to the reference rate for total interest rate.         
+        maturity : int
+            Maturity period in months.
+        payment_frequency : str
+            Frequency of interest payments (e.g. 'M' for monthly, 'Q' for quarterly).
+        trigger_default_on_missed_payment : bool
+            Whether to trigger default if interest payment is missed.
+        write_off_unpaid_interest : bool
+            Whether to write off unpaid interest instead of carrying it forward.
+        interest_on_unpaid_interest : bool
+            Whether to accrue interest on unpaid interest from previous periods.
+        step_up_margin : float
+            Additional margin to apply after step-up date.
+        step_up_date : int
+            Period after which step-up margin applies (e.g. month number).
+        method : str
+            Method for interest calculation (e.g. 'act/360', '30/360').
+        repayment_structure : str
+            Structure for principal repayments ('sequential' or 'pro-rata').
         """
 
         self._name = name
@@ -73,7 +103,8 @@ class Tranche:
 
         self.history_interest = []
         self.history_principal = []
-        
+
+    ## PROPERTIES ##  
     @property
     def name(self):
         """Returns the name of the tranche."""
@@ -150,28 +181,6 @@ class Tranche:
         int_on_arrears = self.current_interest_on_last_period_unpaid_interest(period)
         return due + arrears + int_on_arrears      
     
-    def distribute_due(self, payment_context: dict, period: int) -> RevenuePaymentRunResult:
-        """
-        Pays interest due.
-        """
-        available_revenue_funds = payment_context.get('available_revenue_collections',0.0)
-        pool_balance = payment_context.get('pool_balance', 0.0)
-
-        interest_due = self.current_total_interest_due(period)    
-        revenue_funds_distributed = min(interest_due, available_revenue_funds)
-        interest_unpaid = interest_due - revenue_funds_distributed
-                                                  
-        payment_run_return_payload = {
-            'revenue_funds_distributed' : revenue_funds_distributed,
-            'revenue_amount_unpaid' : interest_unpaid,
-        }
-        
-        self.update_history_interest(period, revenue_funds_distributed, interest_unpaid)
-        self.update_last_paid_and_last_unpaid_interest(revenue_funds_distributed, interest_unpaid)
-        self.update_total_paid_and_total_unpaid_interest(revenue_funds_distributed, interest_unpaid)
-        
-        
-        return payment_run_return_payload
     
     def update_history_interest(self, period: int, paid: float, unpaid: float):
         """Stores interest history for analysis or reporting."""
@@ -204,7 +213,6 @@ class Tranche:
         """Updates balance for principal repayment period."""
         self._last_period_ending_balance = unpaid
 
-
     def update_last_period_paid_principal(self, paid):
         """Stores principal paid in last period."""
         self._last_period_paid_principal = paid               
@@ -218,13 +226,36 @@ class Tranche:
             'current_period_ending_balance': unpaid
         })
 
-    def distribute_principal_due(self, payment_context: dict, period: int) -> dict:
+    # Distribution methods for Revenue and Redemption Waterfall limbs    
+    def distribute_due(self, payment_context: PaymentContext, period: int) -> RevenuePaymentRunResult:
+        """
+        Pays interest due.
+        """
+        available_revenue_funds = payment_context.get('available_revenue_collections',0.0)
+        pool_balance = payment_context.get('pool_balance', 0.0)
+
+        interest_due = self.current_total_interest_due(period)    
+        revenue_funds_distributed = min(interest_due, available_revenue_funds)
+        interest_unpaid = interest_due - revenue_funds_distributed
+                                                  
+        payment_run_return_payload = {
+            'revenue_funds_distributed' : revenue_funds_distributed,
+            'revenue_amount_unpaid' : interest_unpaid,
+        }
+        
+        self.update_history_interest(period, revenue_funds_distributed, interest_unpaid)
+        self.update_last_paid_and_last_unpaid_interest(revenue_funds_distributed, interest_unpaid)
+        self.update_total_paid_and_total_unpaid_interest(revenue_funds_distributed, interest_unpaid)
+        
+        return cast(RevenuePaymentRunResult, payment_run_return_payload)
+
+    def distribute_principal_due(self, payment_context: PaymentContext, period: int) -> RedemptionPaymentRunResult:
         """
         Pays principal due.
         """
         available_redemption_funds = payment_context.get('available_redemption_collections',0.0)
         
-        principal_due = self.current_period_principal_due()
+        principal_due = 0.0 #from the paymetn context TODO: IMPLEMENT PAYMENT CONTEXT PROPERLY
         redemption_funds_distributed = min(principal_due, available_redemption_funds)
         redemption_amount_unpaid = self.last_period_ending_balance - redemption_funds_distributed
         
@@ -238,18 +269,14 @@ class Tranche:
         self.update_last_period_paid_principal(redemption_funds_distributed)
         self.update_last_period_ending_balance(redemption_amount_unpaid)
         
-        return payment_run_return_payload
-    
-    ### TODO ###
-    def current_period_principal_due(self):
-        """Principal due this period based on allocation rules"""
-        if self.repayment_structure == 'sequential':
-            return self.last_period_ending_balance
-        else:
-            pass
-    
+        return cast(RedemptionPaymentRunResult, payment_run_return_payload)
+     
 
+### WATERFALL PROCESSORS ###
 class RevenueProcessor(RevenueWaterfallLimb):
+    """
+    Processor for Revenue Waterfall limbs, wrapping Tranche logic.
+    """
     def __init__(self, tranche: Tranche):
         self._tranche = tranche
         
@@ -257,11 +284,13 @@ class RevenueProcessor(RevenueWaterfallLimb):
     def name(self):
         return self._tranche.name
     
-    def distribute_due(self, payment_context: dict, period: int):
+    def distribute_due(self, payment_context: PaymentContext, period: int) -> RevenuePaymentRunResult:
         return self._tranche.distribute_due(payment_context, period)
 
-
 class RedemptionProcessor(RedemptionWaterfallLimb):
+    """
+    Processor for Redemption Waterfall limbs, wrapping Tranche logic.
+    """
     def __init__(self, tranche: Tranche):
         self._tranche = tranche
     
@@ -269,12 +298,6 @@ class RedemptionProcessor(RedemptionWaterfallLimb):
     def name(self):
         return self._tranche.name
     
-    def distribute_principal_due(self, payment_context, period: int):
+    def distribute_principal_due(self, payment_context: PaymentContext, period: int) -> RedemptionPaymentRunResult:
         return self._tranche.distribute_principal_due(payment_context, period)
-    
-
-
-
-    
-
- 
+     

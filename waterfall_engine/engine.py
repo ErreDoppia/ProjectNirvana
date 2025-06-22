@@ -17,6 +17,65 @@ from .tranche import Tranche
 from .fees import Fee
 from .models import RevenueWaterfallLimb, RedemptionWaterfallLimb
 from .models import RevenuePaymentRunResult, RedemptionPaymentRunResult
+from .models import PaymentContext
+
+class Deal:
+    def __init__(self, 
+                name: str, 
+                tranches: list[Tranche], 
+                fees: list[Fee], 
+                revenue_waterfall_limbs: dict[int, RevenueWaterfallLimb], 
+                redemption_waterfall_limbs: dict[int, RedemptionWaterfallLimb]
+                ):
+        
+        self.name = name
+        self.tranches = tranches
+        self.fees = fees
+
+        self.revenue_waterfall_limbs = revenue_waterfall_limbs
+        self.redemption_waterfall_limbs = redemption_waterfall_limbs
+
+        self.revenue_waterfall = RevenueWaterfall(self.revenue_waterfall_limbs)
+        self.redemption_waterfall = RedemptionWaterfall(self.redemption_waterfall_limbs)
+
+        self.total_initial_balance = 0.0
+        for t in self.tranches:
+            self.total_initial_balance += t.initial_balance
+
+        self.history_revenue = []
+        self.history_redemption = []
+
+
+# ==================================================================
+# ======================PRINCIPAL ALLOCATION RULES==================    
+# ==================================================================
+class PrincipalAllocationRules:
+    """
+    Placeholder for future principal allocation rules.
+    Currently, all tranches are sequential.
+    """
+    def __init__(self, repayment_structure: str = 'sequential'):
+        if repayment_structure not in ['sequential', 'pro-rata']:
+            raise ValueError('Invalid repayment structure')
+        self.repayment_structure = repayment_structure
+
+    def allocate_principal(self, tranches: list[Tranche], available_redemption_funds: float) -> dict[str, float]:
+        """
+        Allocates principal repayments across tranches based on the defined structure.
+        Currently supports only sequential allocation.
+        """
+        if self.repayment_structure == 'sequential':
+            # Sequentially pay down tranches until funds run out
+            allocation = {}
+            for tranche in tranches:
+                if available_redemption_funds <= 0:
+                    break
+                payment = min(tranche.last_period_ending_balance, available_redemption_funds)
+                allocation[tranche.name] = payment
+                available_redemption_funds -= payment
+            return allocation
+        else:
+            raise NotImplementedError("Pro-rata allocation not implemented yet.")
 
 # Applies collections in priority order across limbs
 class RevenueWaterfall:
@@ -26,7 +85,7 @@ class RevenueWaterfall:
         """
         self.limbs = waterfall_limbs
         
-    def apply(self, payment_context: dict, period: int) -> dict[str, dict[str, float]]:
+    def apply(self, payment_context: PaymentContext, period: int) -> dict[str, dict[str, float]]:
         """
         Applies collections to each limb by priority.
         """
@@ -64,7 +123,7 @@ class RedemptionWaterfall:
         """
         self.limbs = waterfall_limbs
         
-    def apply(self, payment_context: dict, period: int) -> dict[str, dict[str, float]]:
+    def apply(self, payment_context: PaymentContext, period: int) -> dict[str, dict[str, float]]:
         """
         Applies collections to each limb by priority.
         """
@@ -95,33 +154,6 @@ class RedemptionWaterfall:
         return results
 
 
-class Deal:
-    def __init__(self, 
-                name: str, 
-                tranches: list[Tranche], 
-                fees: list[Fee], 
-                revenue_waterfall_limbs: dict[int, RevenueWaterfallLimb], 
-                redemption_waterfall_limbs: dict[int, RedemptionWaterfallLimb]
-                ):
-        
-        self.name = name
-        self.tranches = tranches
-        self.fees = fees
-
-        self.revenue_waterfall_limbs = revenue_waterfall_limbs
-        self.redemption_waterfall_limbs = redemption_waterfall_limbs
-
-        self.revenue_waterfall = RevenueWaterfall(self.revenue_waterfall_limbs)
-        self.redemption_waterfall = RedemptionWaterfall(self.redemption_waterfall_limbs)
-
-        self.total_initial_balance = 0.0
-        for t in self.tranches:
-            self.total_initial_balance += t.initial_balance
-
-        self.history_revenue = []
-        self.history_redemption = []
-
-
 # Waterfall execution
 class RunWaterfall:
     def __init__(self, deal: Deal):
@@ -130,7 +162,7 @@ class RunWaterfall:
         """
         self.deal = deal
         
-    def run_IPD(self, payment_context: dict, period: int):
+    def run_IPD(self, payment_context: PaymentContext, period: int):
         """
         Executes one Interest Payment Date logic.
         """
@@ -149,6 +181,9 @@ class RunWaterfall:
         print(f"Principal: {self.deal.history_redemption[period-1]}")
         print("")
         
-    def run_all_IPDs(self, payment_context: dict):
+    def run_all_IPDs(self, payment_context: PaymentContext):
+        """
+        Executes all Interest Payment Dates for the given payment context.
+        """
         for i, pmt_cntx in enumerate(payment_context, 1):
             self.run_IPD(pmt_cntx, i)
