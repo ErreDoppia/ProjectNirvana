@@ -1,7 +1,7 @@
 
 import unittest
-from waterfall_engine.tranche import Tranche, RedemptionProcessor
-from waterfall_engine.models import PaymentContext
+from waterfall_engine.tranche import Tranche
+from waterfall_engine.models import PaymentContext, RedemptionProcessor
 
 
 class TestInterestCalcs(unittest.TestCase):

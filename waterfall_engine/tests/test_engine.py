@@ -1,9 +1,9 @@
 
 import unittest
 from waterfall_engine.engine import Deal, RunWaterfall
-from waterfall_engine.tranche import Tranche, RevenueProcessor, RedemptionProcessor
+from waterfall_engine.tranche import Tranche
 from waterfall_engine.fees import Fee  
-from waterfall_engine.models import PaymentContext 
+from waterfall_engine.models import PaymentContext, RevenueProcessor, RedemptionProcessor
 from waterfall_engine.waterfalls import RevenueWaterfall, RedemptionWaterfall
 
 

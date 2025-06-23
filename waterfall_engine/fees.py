@@ -1,6 +1,6 @@
 
 from typing import cast
-from .models import RevenueWaterfallLimb, RevenuePaymentRunResult
+from .models import RevenueWaterfallLimb, ApplyRevenueDueResult
 from .models import PaymentContext
 from .settings import FREQ_MULTIPLIER
 
@@ -67,7 +67,7 @@ class Fee(RevenueWaterfallLimb):
         else:
             return dollar_amount_due
     
-    def apply_revenue_due(self, payment_context: PaymentContext, period: int) -> RevenuePaymentRunResult: 
+    def apply_revenue_due(self, payment_context: PaymentContext, period: int) -> ApplyRevenueDueResult: 
         """
         Applies payment and tracks unpaid portion.
         """
@@ -82,23 +82,18 @@ class Fee(RevenueWaterfallLimb):
         self.total_unpaid += unpaid
 
         payment_run_return_payload = {
+            'amount_due': due,
             'revenue_funds_distributed' : paid,
             'revenue_amount_unpaid' : unpaid,
         }
                
-        self.update_history(period, pool_balance, paid, unpaid)
-
-        return cast(RevenuePaymentRunResult, payment_run_return_payload)
+        return ApplyRevenueDueResult(**payment_run_return_payload)
     
-    def update_history(self, period: int, pool_balance: float, paid: float, unpaid: float):
+    def update_history_revenue_distributions(self, period: int, due: float, paid: float, unpaid: float):
 
-        due = self.amount_due(pool_balance, period)
-
-        self.history.append(
-            {
+        self.history.append({
                 'period': period, 
                 'amount_due': due,
                 'amount_paid': paid, 
                 'amount_unpaid': unpaid
-            }
-        )
+                })

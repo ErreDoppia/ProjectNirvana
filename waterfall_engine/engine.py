@@ -9,7 +9,7 @@ from .fees import Fee
 from .deal import Deal
 from .models import RevenueWaterfallLimb, RedemptionWaterfallLimb
 from .waterfalls import RevenueWaterfall, RedemptionWaterfall
-from .models import RevenuePaymentRunResult, RedemptionPaymentRunResult
+from .models import ApplyRevenueDueResult, ApplyRedemptionDueResult
 from .models import PaymentContext, WaterfallLimbResult
 from .calculations import PrincipalAllocationRules   
 
@@ -52,6 +52,46 @@ class RunWaterfall:
         self.deal.history_revenue.append(snapshot_revenue)
         self.deal.history_redemption.append(snapshot_redemption)
 
+    def update_revenue_waterfall_limbs_history(self, period: int, revenue_results: dict[str, WaterfallLimbResult]):
+        """
+        Updates the relevant waterfall limb history for the deal based on the revenue results.
+        """
+        for i, limb in enumerate(self.deal.revenue_waterfall_limbs.values(), start=1):
+            if isinstance(limb, RevenueWaterfallLimb):
+                limb_name = limb.name
+                limb_key = f"{i} - {limb_name}"
+                limb.update_history_revenue_distributions(
+                    period=period,
+                    due=revenue_results.get(limb_key, {}).get('amount_due', 0.0),
+                    paid=revenue_results.get(limb_key, {}).get('amount_paid', 0.0),
+                    unpaid=revenue_results.get(limb_key, {}).get('amount_unpaid', 0.0)
+                )
+
+    def update_tranches_last_period_interest(self, period, revenue_results: dict[str, WaterfallLimbResult]):
+        """
+        Updates each tranche's last paid and unpaid interest amounts based on the revenue waterfall results.
+        """
+        for i, tranche in enumerate(self.deal.tranches, start=1):
+            limb_name = tranche.name
+            limb_key = f"{i} - {limb_name}"
+            tranche.update_last_paid_and_last_unpaid_interest(
+                paid=revenue_results.get(limb_key, {}).get('amount_paid', 0.0),
+                unpaid=revenue_results.get(limb_key, {}).get('amount_unpaid', 0.0)
+            )
+
+    def update_tranches_total_interest(self, period, revenue_results: dict[str, WaterfallLimbResult]):
+        """
+        Updates each tranche's total paid and unpaid interest amounts based on the revenue waterfall results.
+        """
+        for i, tranche in enumerate(self.deal.tranches, start=1):
+            limb_name = tranche.name
+            limb_key = f"{i} - {limb_name}"
+            tranche.update_total_paid_and_total_unpaid_interest(
+                paid=revenue_results.get(limb_key, {}).get('amount_paid', 0.0),
+                unpaid=revenue_results.get(limb_key, {}).get('amount_unpaid', 0.0)
+            )
+
+
     def allocate_principal(self, payment_context: PaymentContext) -> dict[str, float]:
         """
         Allocates principal payments based on the repayment structure of the deal.
@@ -76,7 +116,9 @@ class RunWaterfall:
         
         # Update deal history with results
         self.update_deal_history(period, rev_waterfall_results, red_waterfall_results)
-        
+        self.update_revenue_waterfall_limbs_history(period, rev_waterfall_results)
+        self.update_tranches_last_period_interest(period, rev_waterfall_results)
+
         print(f"IPD number {period}")
         print(f"Interest: {self.deal.history_revenue[period-1]}")
         print("")

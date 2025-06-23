@@ -3,8 +3,8 @@
 import unittest
 
 from waterfall_engine.calculations import PrincipalAllocationRules
-from waterfall_engine.models import PaymentContext
-from waterfall_engine.tranche import Tranche, RevenueProcessor, RedemptionProcessor
+from waterfall_engine.models import PaymentContext, RevenueProcessor, RedemptionProcessor
+from waterfall_engine.tranche import Tranche
 from waterfall_engine.deal import Deal
 
 

@@ -6,17 +6,18 @@ from typing import TypedDict, Dict
 
 
 ### RESULT DATA STRUCTURES ###
-class RevenuePaymentRunResult(TypedDict):
+class ApplyRevenueDueResult(TypedDict):
     """
-    Represents the result of a distribute_due method.
+    Represents the result of a apply_revenue_due method.
     Contains the amount of funds distributed and any unpaid amounts.
     """
+    amount_due: float
     revenue_funds_distributed: float
     revenue_amount_unpaid: float
 
-class RedemptionPaymentRunResult(TypedDict):
+class ApplyRedemptionDueResult(TypedDict):
     """
-    Represents the result of a distribute_principal_due method.
+    Represents the result of a apply_redemption_due method.
     Contains the amount of funds distributed and any unpaid amounts.
     """
     redemption_funds_distributed: float
@@ -24,10 +25,11 @@ class RedemptionPaymentRunResult(TypedDict):
 
 class WaterfallLimbResult(TypedDict):
     """
-    Represents the result of a waterfall limb distribution.
+    Represents the result of a waterfall limb distribution (apply method).
     Contains the available cash, amount paid, and amount unpaid.
     """
     available_cash: float
+    amount_due: float
     amount_paid: float
     amount_unpaid: float
 
@@ -47,9 +49,17 @@ class RevenueWaterfallLimb(ABC):
     """
     
     @abstractmethod
-    def apply_revenue_due(self, *args, **kwargs) -> RevenuePaymentRunResult:
+    def apply_revenue_due(self, *args, **kwargs) -> ApplyRevenueDueResult:
         """
         Processes the payment due for this limb in a given period.
+        """
+        pass
+
+    @abstractmethod
+    def update_history_revenue_distributions(self, period: int, due: float, paid: float, unpaid: float):
+        """
+        Updates the history of payments for this limb.
+        This method can be overridden by subclasses to implement specific history tracking.
         """
         pass
      
@@ -68,11 +78,20 @@ class RedemptionWaterfallLimb(ABC):
     """
     
     @abstractmethod
-    def apply_redemption_due(self, *args, **kwargs) -> RedemptionPaymentRunResult:
+    def apply_redemption_due(self, *args, **kwargs) -> ApplyRedemptionDueResult:
         """
         Processes the payment due for this limb in a given period.
         """
         pass
+
+    @abstractmethod
+    def update_history_redemption_distributions(self, period, paid, unpaid):
+        """
+        Updates the history of payments for this limb.
+        This method can be overridden by subclasses to implement specific history tracking.
+        """
+        pass
+
      
     @property
     @abstractmethod
@@ -95,8 +114,14 @@ class RevenueProcessor(RevenueWaterfallLimb):
     def name(self):
         return self._limb.name
 
-    def apply_revenue_due(self, payment_context: PaymentContext, period: int) -> RevenuePaymentRunResult:
+    def apply_revenue_due(self, payment_context: PaymentContext, period: int) -> ApplyRevenueDueResult:
         return self._limb.apply_revenue_due(payment_context, period)
+    
+    def update_history_revenue_distributions(self, period: int, due: float, paid: float, unpaid: float):
+        """
+        Updates the history of payments for this limb.
+        """
+        self._limb.update_history_revenue_distributions(period, due, paid, unpaid)
 
 class RedemptionProcessor(RedemptionWaterfallLimb):
     """
@@ -111,5 +136,8 @@ class RedemptionProcessor(RedemptionWaterfallLimb):
     def name(self):
         return self._limb.name
 
-    def apply_redemption_due(self, payment_context: PaymentContext, period: int) -> RedemptionPaymentRunResult:
+    def apply_redemption_due(self, payment_context: PaymentContext, period: int) -> ApplyRedemptionDueResult:
         return self._limb.apply_redemption_due(payment_context, period)
+    
+    def update_history_redemption_distributions(self, period: int, paid: float, unpaid: float):
+        self._limb.update_history_redemption_distributions(period, paid, unpaid)

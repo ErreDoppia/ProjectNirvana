@@ -1,7 +1,6 @@
  
 from .models import PaymentContext, RevenueWaterfallLimb, RedemptionWaterfallLimb, WaterfallLimbResult
 
-
 ### REVENUE AND REDEMPTION WATERFALLS ###
 class RevenueWaterfall:
     """

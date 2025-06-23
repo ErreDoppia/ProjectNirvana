@@ -1,9 +1,9 @@
 
 from waterfall_engine.deal import Deal
 from waterfall_engine.engine import RunWaterfall
-from waterfall_engine.tranche import Tranche, RevenueProcessor, RedemptionProcessor
+from waterfall_engine.tranche import Tranche
 from waterfall_engine.fees import Fee
-from waterfall_engine.models import PaymentContext
+from waterfall_engine.models import PaymentContext, RevenueProcessor, RedemptionProcessor
 
 
 tranche_a = Tranche("A", 100e6, 0, 1.1/100, 60, "Q")

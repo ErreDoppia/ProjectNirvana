@@ -181,6 +181,7 @@ class TestFeeDistribution(unittest.TestCase):
         result = self.fee.apply_revenue_due(payment_context, period)
 
         expected_result = {
+            'amount_due': 1000.0,
             'revenue_funds_distributed': 0.0,
             'revenue_amount_unpaid': 1000.0
         }
