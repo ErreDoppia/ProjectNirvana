@@ -1,6 +1,6 @@
 
-
-from waterfall_engine.engine import RunWaterfall, Deal
+from waterfall_engine.deal import Deal
+from waterfall_engine.engine import RunWaterfall
 from waterfall_engine.tranche import Tranche, RevenueProcessor, RedemptionProcessor
 from waterfall_engine.fees import Fee
 from waterfall_engine.models import PaymentContext
@@ -32,19 +32,13 @@ my_deal = Deal(
     revenue_waterfall_limbs=revenue_waterfall_limbs, 
     redemption_waterfall_limbs=redemption_waterfall_limbs,
     )
-    
-print(my_deal.total_initial_balance)
+
 
 # Run a few periods
 payment_context: list[PaymentContext] = [
-    PaymentContext(available_redemption_collections=9e6, available_revenue_collections=1e6, pool_balance=150e6),
-    PaymentContext(available_redemption_collections=7.5e6, available_revenue_collections=850000, pool_balance=150e6),
-    PaymentContext(available_redemption_collections=6e6, available_revenue_collections=720000, pool_balance=150e6)
+    PaymentContext(available_redemption_collections=1.5e6, available_revenue_collections=1e6, pool_balance=150e6),
+    PaymentContext(available_redemption_collections=1.5e6, available_revenue_collections=1e6, pool_balance=150e6),
+    PaymentContext(available_redemption_collections=1.5e6, available_revenue_collections=1e6, pool_balance=150e6)
 ]
 
 RunWaterfall(my_deal).run_all_IPDs(payment_context)
-
-
-
-
-#my_deal.run_all_IPDs(payment_context)  

@@ -1,5 +1,5 @@
  
-from .models import PaymentContext, RevenueWaterfallLimb, RedemptionWaterfallLimb
+from .models import PaymentContext, RevenueWaterfallLimb, RedemptionWaterfallLimb, WaterfallLimbResult
 
 
 ### REVENUE AND REDEMPTION WATERFALLS ###
@@ -13,7 +13,7 @@ class RevenueWaterfall:
         """
         self.limbs = waterfall_limbs
         
-    def apply(self, payment_context: PaymentContext, period: int) -> dict[str, dict[str, float]]:
+    def apply(self, payment_context: PaymentContext, period: int) -> dict[str, WaterfallLimbResult]:
         """
         Applies collections to each limb by priority.
         """
@@ -21,7 +21,7 @@ class RevenueWaterfall:
             
         for priority, limb in self.limbs.items(): 
             name = limb.name
-            payment_run_payload = limb.distribute_due(payment_context, period)
+            payment_run_payload = limb.apply_revenue_due(payment_context, period)
             
             revenue_funds_distributed = payment_run_payload.get('revenue_funds_distributed')
             amount_unpaid = payment_run_payload.get('revenue_amount_unpaid')
@@ -53,7 +53,7 @@ class RedemptionWaterfall:
         """
         self.limbs = waterfall_limbs
         
-    def apply(self, payment_context: PaymentContext, period: int) -> dict[str, dict[str, float]]:
+    def apply(self, payment_context: PaymentContext, period: int) -> dict[str, WaterfallLimbResult]:
         """
         Applies collections to each limb by priority.
         """
@@ -61,7 +61,7 @@ class RedemptionWaterfall:
             
         for priority, limb in self.limbs.items(): 
             name = limb.name
-            payment_run_payload = limb.distribute_principal_due(payment_context, period)
+            payment_run_payload = limb.apply_redemption_due(payment_context, period)
             
             redemption_funds_distributed = payment_run_payload.get('redemption_funds_distributed')
             amount_unpaid = payment_run_payload.get('redemption_amount_unpaid')

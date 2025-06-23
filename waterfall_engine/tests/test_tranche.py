@@ -191,7 +191,7 @@ class TestTrancheIntegration(unittest.TestCase):
         # Loop through each period's payment context
         for i, pmt_cntx in enumerate(payment_context, 1):
             # Run the redemption process for the period
-            RedemptionProcessor(self.tranche).distribute_principal_due(pmt_cntx, i)
+            RedemptionProcessor(self.tranche).apply_redemption_due(pmt_cntx, i)
 
             # Construct expected output for the history
             exp_history = {
@@ -239,7 +239,7 @@ class TestTrancheIntegration(unittest.TestCase):
         expected = []
 
         for i, pmt_cntx in enumerate(payment_context, 1):
-            self.tranche.distribute_due(pmt_cntx, i)
+            self.tranche.apply_revenue_due(pmt_cntx, i)
 
             j = i-1
 

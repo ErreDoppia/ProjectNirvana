@@ -2,9 +2,10 @@
 
 from typing import cast
 from .settings import FREQ_MULTIPLIER
-from .models import RevenueWaterfallLimb, RedemptionWaterfallLimb
+from .calculations import InterestAmountCalculation
 from .models import RevenuePaymentRunResult, RedemptionPaymentRunResult
 from .models import PaymentContext
+
 
 ### TRANCHE CLASS ###
 class Tranche:
@@ -143,6 +144,7 @@ class Tranche:
         """Balance forecasted after current payments."""
         return self._current_period_ending_balance 
     
+    # Current interest rate methods
     def current_period_margin(self, period: int) -> float:
         """
         Returns the applicable margin (step-up if triggered).
@@ -157,31 +159,40 @@ class Tranche:
         """
         return self.current_period_margin(period) + self.reference_rate
     
+    # Interest amount calculations
     def current_interest_on_last_period_unpaid_interest(self, period: int) -> float: 
         """
         Interest accrued on last period’s arrears.
         """
         arrears = self.last_period_unpaid_interest
         interest_rate = self.current_all_in_rate(period)
-        multiplier = FREQ_MULTIPLIER.get(self.payment_frequency)
-        interest_on_arrears = arrears * interest_rate / multiplier
+        interest_on_arrears = InterestAmountCalculation.calculate(
+            balance=arrears, 
+            interest_rate=interest_rate, 
+            payment_frequency=self.payment_frequency, 
+            method=self.method
+            )
         return interest_on_arrears
     
     def current_interest_due(self, period: int) -> float:
         """
         Interest due this period based on ending balance.
         """
-        multiplier = FREQ_MULTIPLIER.get(self.payment_frequency)
-        due = round(self.current_all_in_rate(period) * self.last_period_ending_balance / multiplier, 2)
+        due = InterestAmountCalculation.calculate(
+            balance=self.last_period_ending_balance, 
+            interest_rate=self.current_all_in_rate(period), 
+            payment_frequency=self.payment_frequency, 
+            method=self.method
+        )
         return due
-    
+
     def current_total_interest_due(self, period: int) -> float:
         """
         Total interest due including arrears and interest on arrears.
         """
         due = self.current_interest_due(period)
         arrears = self.last_period_unpaid_interest
-        int_on_arrears = round(self.current_interest_on_last_period_unpaid_interest(period), 2)
+        int_on_arrears = self.current_interest_on_last_period_unpaid_interest(period)
         return due + arrears + int_on_arrears
 
 
@@ -230,7 +241,7 @@ class Tranche:
         })
 
     # Distribution methods for Revenue and Redemption Waterfall limbs    
-    def distribute_due(self, payment_context: PaymentContext, period: int) -> RevenuePaymentRunResult:
+    def apply_revenue_due(self, payment_context: PaymentContext, period: int) -> RevenuePaymentRunResult:
         """
         Pays interest due.
         """
@@ -250,9 +261,9 @@ class Tranche:
         self.update_last_paid_and_last_unpaid_interest(revenue_funds_distributed, interest_unpaid)
         self.update_total_paid_and_total_unpaid_interest(revenue_funds_distributed, interest_unpaid)
         
-        return cast(RevenuePaymentRunResult, payment_run_return_payload)
+        return RevenuePaymentRunResult(**payment_run_return_payload)
 
-    def distribute_principal_due(self, payment_context: PaymentContext, period: int) -> RedemptionPaymentRunResult:
+    def apply_redemption_due(self, payment_context: PaymentContext, period: int) -> RedemptionPaymentRunResult:
         """
         Pays principal due.
         """
@@ -271,36 +282,5 @@ class Tranche:
         self.update_history_principal(period, redemption_funds_distributed, redemption_amount_unpaid)
         self.update_last_period_paid_principal(redemption_funds_distributed)
         self.update_last_period_ending_balance(redemption_amount_unpaid)
-        
-        return cast(RedemptionPaymentRunResult, payment_run_return_payload)
-     
 
-### WATERFALL PROCESSORS ###
-class RevenueProcessor(RevenueWaterfallLimb):
-    """
-    Processor for Revenue Waterfall limbs, wrapping Tranche logic.
-    """
-    def __init__(self, tranche: Tranche):
-        self._tranche = tranche
-        
-    @property
-    def name(self):
-        return self._tranche.name
-    
-    def distribute_due(self, payment_context: PaymentContext, period: int) -> RevenuePaymentRunResult:
-        return self._tranche.distribute_due(payment_context, period)
-
-class RedemptionProcessor(RedemptionWaterfallLimb):
-    """
-    Processor for Redemption Waterfall limbs, wrapping Tranche logic.
-    """
-    def __init__(self, tranche: Tranche):
-        self._tranche = tranche
-    
-    @property
-    def name(self):
-        return self._tranche.name
-    
-    def distribute_principal_due(self, payment_context: PaymentContext, period: int) -> RedemptionPaymentRunResult:
-        return self._tranche.distribute_principal_due(payment_context, period)
-     
+        return RedemptionPaymentRunResult(**payment_run_return_payload)

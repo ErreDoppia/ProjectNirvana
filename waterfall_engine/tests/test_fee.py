@@ -150,7 +150,7 @@ class TestFeeDistribution(unittest.TestCase):
 
         # Simulate fee distribution for each period and build expected history
         for i, context in enumerate(payment_context, start=1):
-            self.fee.distribute_due(context, i)
+            self.fee.apply_revenue_due(context, i)
 
             due = 1e3
             paid = min(context.available_revenue_collections, due)
@@ -178,7 +178,7 @@ class TestFeeDistribution(unittest.TestCase):
         payment_context = PaymentContext(pool_balance=10e6, available_revenue_collections=0.0, available_redemption_collections=0.0)
         period = 1
 
-        result = self.fee.distribute_due(payment_context, period)
+        result = self.fee.apply_revenue_due(payment_context, period)
 
         expected_result = {
             'revenue_funds_distributed': 0.0,
@@ -203,17 +203,17 @@ class TestFeeDistribution(unittest.TestCase):
         payment_context = PaymentContext(pool_balance=10e6, available_revenue_collections=10000.0, available_redemption_collections=0.0)
 
         # Period 1 should distribute
-        result_period_1 = fee.distribute_due(payment_context, 1)
+        result_period_1 = fee.apply_revenue_due(payment_context, 1)
         self.assertEqual(result_period_1['revenue_funds_distributed'], 1000.0)
         self.assertEqual(result_period_1['revenue_amount_unpaid'], 0.0)
 
         # Period 2 should not distribute
-        result_period_2 = fee.distribute_due(payment_context, 2)
+        result_period_2 = fee.apply_revenue_due(payment_context, 2)
         self.assertEqual(result_period_2['revenue_funds_distributed'], 0.0)
         self.assertEqual(result_period_2['revenue_amount_unpaid'], 0.0)
 
         # Period 3 should distribute
-        result_period_3 = fee.distribute_due(payment_context, 3)
+        result_period_3 = fee.apply_revenue_due(payment_context, 3)
         self.assertEqual(result_period_3['revenue_funds_distributed'], 1000.0)
         self.assertEqual(result_period_3['revenue_amount_unpaid'], 0.0)
 

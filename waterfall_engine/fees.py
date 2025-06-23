@@ -67,7 +67,7 @@ class Fee(RevenueWaterfallLimb):
         else:
             return dollar_amount_due
     
-    def distribute_due(self, payment_context: PaymentContext, period: int) -> RevenuePaymentRunResult: 
+    def apply_revenue_due(self, payment_context: PaymentContext, period: int) -> RevenuePaymentRunResult: 
         """
         Applies payment and tracks unpaid portion.
         """

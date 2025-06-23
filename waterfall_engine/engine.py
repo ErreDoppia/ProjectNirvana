@@ -3,89 +3,80 @@ from typing import Optional
 from abc import ABC, abstractmethod
 from typing import TypedDict
 
-from math import isclose
-
 from .settings import FREQ_MULTIPLIER
 from .tranche import Tranche
 from .fees import Fee
 from .deal import Deal
 from .models import RevenueWaterfallLimb, RedemptionWaterfallLimb
+from .waterfalls import RevenueWaterfall, RedemptionWaterfall
 from .models import RevenuePaymentRunResult, RedemptionPaymentRunResult
-from .models import PaymentContext
+from .models import PaymentContext, WaterfallLimbResult
+from .calculations import PrincipalAllocationRules   
 
-
-### PRINCIPAL ALLOCATION RULES ###
-class PrincipalAllocationRules:
-    def __init__(self, deal: Deal):
-
-        self.deal = deal
-
-    def allocate_principal(self, payment_context: PaymentContext) -> dict[str, float]:
-        """
-        Allocates principal repayments across tranches based on the defined structure.
-        Currently supports only sequential allocation.
-        """
-
-        available_funds = payment_context.available_redemption_collections
-        tranches = self.deal.tranches
-        allocation: dict[str, float] = {}
-
-        if self.deal.repayment_structure == 'sequential':
-            weights = {
-                tranche.name: 1.0 for tranche in tranches if tranche.last_period_ending_balance > 0
-            }
-        else:
-            # Pro-rata allocation weights based on last period ending balance
-            weights = {
-                tranche.name: tranche.last_period_ending_balance / self.deal.total_last_period_ending_balance
-                for tranche in tranches
-            }
-            # Ensure weights sum to 1
-            total_weight = sum(weights.values())
-            if not isclose(total_weight, 1.0):
-                raise ValueError("Weights do not sum to 1.0, check tranche balances.")
- 
-        # Compute allocation
-        for tranche in tranches:
-            desired_allocation = round(weights[tranche.name] * available_funds, 2)
-            payment = min(tranche.last_period_ending_balance, desired_allocation)
-            if payment > 0:
-                allocation[tranche.name] = payment
-                available_funds -= payment
-
-        return allocation
-     
 
 ### RUN WATERFALL ENGINE ###
 class RunWaterfall:
     def __init__(self, deal: Deal):
         """
-        Initialize the securitization deal with waterfall limbs and structure.
+        Orchestrator for running the waterfall logic on a given deal.
         """
         self.deal = deal
-        
-    def run_IPD(self, payment_context: PaymentContext, period: int):
-        """
-        Executes one Interest Payment Date logic.
-        """
-        principal_allocations = PrincipalAllocationRules(self.deal).allocate_principal(payment_context)
-        payment_context.principal_allocations = principal_allocations
 
-        if payment_context.principal_allocations == principal_allocations:
-            # Apply revenue and redemption waterfalls
-            rev_waterfall_results = self.deal.revenue_waterfall.apply(payment_context, period)
-            red_waterfall_results = self.deal.redemption_waterfall.apply(payment_context, period)
-        else:
-            raise ValueError("Principal allocations do not match expected allocations.")
-        
-        snapshot_revenue = {period: rev_waterfall_results}
-        snapshot_redemption = {period: red_waterfall_results}
+        self._revenue_waterfall = RevenueWaterfall(self.deal.revenue_waterfall_limbs)
+        self._redemption_waterfall = RedemptionWaterfall(self.deal.redemption_waterfall_limbs)
+
+    def apply_revenue_waterfall(self, payment_context: PaymentContext, period: int) -> dict[str, WaterfallLimbResult]:
+        """
+        Applies the revenue waterfall logic for a given payment context and period.
+        Returns the results of the revenue distribution.
+        """
+        return self._revenue_waterfall.apply(payment_context, period)
+
+    def apply_redemption_waterfall(self, payment_context: PaymentContext, period: int) -> dict[str, WaterfallLimbResult]:
+        """
+        Applies the redemption waterfall logic for a given payment context and period.
+        Returns the results of the redemption distribution.
+        """
+        return self._redemption_waterfall.apply(payment_context, period)
+
+    def update_deal_history(
+            self, period: int, revenue_results: dict[str, WaterfallLimbResult], 
+            redemption_results: dict[str, WaterfallLimbResult]
+        ):
+        """
+        Updates the deal's history with the results of the revenue and redemption waterfalls.
+        """
+        snapshot_revenue = {period: revenue_results}
+        snapshot_redemption = {period: redemption_results}
 
         self.deal.history_revenue.append(snapshot_revenue)
         self.deal.history_redemption.append(snapshot_redemption)
 
-        self.deal.update_total_last_period_ending_balance()
+    def allocate_principal(self, payment_context: PaymentContext) -> dict[str, float]:
+        """
+        Allocates principal payments based on the repayment structure of the deal.
+        Returns a dictionary of principal allocations per tranche.
+        """
+        principal_allocations = PrincipalAllocationRules(self.deal.tranches, self.deal.repayment_structure).allocate_principal(payment_context)
+        payment_context.principal_allocations = principal_allocations
+        return principal_allocations
 
+    def run_IPD(self, payment_context: PaymentContext, period: int):
+        """
+        Executes one Interest Payment Date logic.
+        """
+        principal_allocations = self.allocate_principal(payment_context)
+
+        if payment_context.principal_allocations == principal_allocations:
+            # Apply revenue and redemption waterfalls
+            rev_waterfall_results = self.apply_revenue_waterfall(payment_context, period)
+            red_waterfall_results = self.apply_redemption_waterfall(payment_context, period)
+        else:
+            raise ValueError("Principal allocations do not match expected allocations.")
+        
+        # Update deal history with results
+        self.update_deal_history(period, rev_waterfall_results, red_waterfall_results)
+        
         print(f"IPD number {period}")
         print(f"Interest: {self.deal.history_revenue[period-1]}")
         print("")
