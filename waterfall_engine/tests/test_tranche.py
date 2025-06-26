@@ -180,9 +180,9 @@ class TestTrancheIntegration(unittest.TestCase):
         
         # Simulated payment context for 3 periods
         payment_context = [
-            PaymentContext(available_redemption_collections=5e6, available_revenue_collections=0.0, pool_balance=10e6, principal_allocations={"test_tranche": 5e6}),
-            PaymentContext(available_redemption_collections=2.5e6, available_revenue_collections=0.0, pool_balance=10e6, principal_allocations={"test_tranche": 2.5e6}),
-            PaymentContext(available_redemption_collections=2.5e6, available_revenue_collections=0.0, pool_balance=10e6, principal_allocations={"test_tranche": 2.5e6})
+            PaymentContext(available_redemption_collections=5e6, available_revenue_collections=0.0, pool_balance=10e6, principal_allocations={"test_tranche": 5e6}, revenue_collections=0.0, redemption_collections=0.0,),
+            PaymentContext(available_redemption_collections=2.5e6, available_revenue_collections=0.0, pool_balance=10e6, principal_allocations={"test_tranche": 2.5e6}, revenue_collections=0.0, redemption_collections=0.0,),
+            PaymentContext(available_redemption_collections=2.5e6, available_revenue_collections=0.0, pool_balance=10e6, principal_allocations={"test_tranche": 2.5e6}, revenue_collections=0.0, redemption_collections=0.0,)
         ]
         
         initial_balance = 10e6
@@ -191,7 +191,12 @@ class TestTrancheIntegration(unittest.TestCase):
         # Loop through each period's payment context
         for i, pmt_cntx in enumerate(payment_context, 1):
             # Run the redemption process for the period
-            RedemptionProcessor(self.tranche).apply_redemption_due(pmt_cntx, i)
+
+            payment_run = self.tranche.apply_redemption_due(pmt_cntx, i)
+            paid = payment_run.get('redemption_funds_distributed')
+            unpaid = payment_run.get('redemption_amount_unpaid')
+            self.tranche.update_history_redemption_distributions(i, paid, unpaid)
+            self.tranche.update_last_period_ending_balance(unpaid)
 
             # Construct expected output for the history
             exp_history = {
@@ -204,6 +209,7 @@ class TestTrancheIntegration(unittest.TestCase):
 
             # Update balance for next iteration
             initial_balance -= pmt_cntx.available_redemption_collections
+            
 
         result = self.tranche.history_principal
 
@@ -211,7 +217,7 @@ class TestTrancheIntegration(unittest.TestCase):
         self.assertAlmostEqual(0.0, result[-1].get('current_period_ending_balance'), msg=result)
 
         # Ensure the lengths match
-        self.assertEqual(len(expected), len(result))
+        self.assertEqual(len(expected), len(result), f"Expected {len(expected)} entries, got {len(result)}")
 
         # Compare each period's expected vs actual results
         for exp, res in zip(expected, result):
@@ -226,20 +232,26 @@ class TestTrancheIntegration(unittest.TestCase):
         """
         # Simulated payment context for 3 periods
         payment_context = [
-            PaymentContext(available_revenue_collections=200e3, available_redemption_collections=0.0, pool_balance=10e6),
-            PaymentContext(available_revenue_collections=100e3, available_redemption_collections=0.0, pool_balance=10e6),
-            PaymentContext(available_revenue_collections=500e3, available_redemption_collections=0.0, pool_balance=10e6)
+            PaymentContext(available_revenue_collections=200e3, available_redemption_collections=0.0, pool_balance=10e6, revenue_collections=0.0, redemption_collections=0.0,),
+            PaymentContext(available_revenue_collections=100e3, available_redemption_collections=0.0, pool_balance=10e6, revenue_collections=0.0, redemption_collections=0.0,),
+            PaymentContext(available_revenue_collections=500e3, available_redemption_collections=0.0, pool_balance=10e6, revenue_collections=0.0, redemption_collections=0.0,)
         ]
 
-        due = round ( 10e6 * (0.06 + 0.02) / 4 , 2 )
-        current_interest_due = [due, due, due]        
+        exp_due = round ( 10e6 * (0.06 + 0.02) / 4 , 2 )
+        current_interest_due = [exp_due, exp_due, exp_due]        
         last_period_unpaid = [0,0,100e3]
         interest_on_last_period_unpaid_interest = [0,0,2e3]
 
         expected = []
 
         for i, pmt_cntx in enumerate(payment_context, 1):
-            self.tranche.apply_revenue_due(pmt_cntx, i)
+            payment_run = self.tranche.apply_revenue_due(pmt_cntx, i)
+            due = self.tranche.current_total_interest_due(i)
+            paid = payment_run.get('revenue_funds_distributed')
+            unpaid = payment_run.get('revenue_amount_unpaid')
+
+            self.tranche.update_history_revenue_distributions(i, due, paid, unpaid)
+            self.tranche.update_last_paid_and_last_unpaid_interest(paid, unpaid)
 
             j = i-1
 
@@ -262,6 +274,9 @@ class TestTrancheIntegration(unittest.TestCase):
             expected.append(exp_history)
 
         result = self.tranche.history_interest
+
+        # Ensure the test fails if result is unexpectedly empty or mismatched
+        self.assertEqual(len(result), len(expected), f"Expected {len(expected)} entries, got {len(result)}")
 
         for exp, res in zip(expected, result):
             for key in exp:

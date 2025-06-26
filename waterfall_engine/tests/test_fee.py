@@ -141,9 +141,9 @@ class TestFeeDistribution(unittest.TestCase):
         Test the distribution of fee payments over multiple periods and verify history.
         """
         payment_context = [
-            PaymentContext(available_revenue_collections=10000.0, available_redemption_collections=0.0, pool_balance=10e6),
-            PaymentContext(available_revenue_collections=500.0, available_redemption_collections=0.0, pool_balance=10e6),
-            PaymentContext(available_revenue_collections=10000.0, available_redemption_collections=0.0, pool_balance=10e6)
+            PaymentContext(available_revenue_collections=10000.0, available_redemption_collections=0.0, revenue_collections=0.0, redemption_collections=0.0, pool_balance=10e6),
+            PaymentContext(available_revenue_collections=500.0, available_redemption_collections=0.0, revenue_collections=0.0, redemption_collections=0.0, pool_balance=10e6),
+            PaymentContext(available_revenue_collections=10000.0, available_redemption_collections=0.0, revenue_collections=0.0, redemption_collections=0.0, pool_balance=10e6)
         ]
         
         expected_history = []
@@ -175,7 +175,7 @@ class TestFeeDistribution(unittest.TestCase):
         """
         Test fee distribution when no funds are available.
         """
-        payment_context = PaymentContext(pool_balance=10e6, available_revenue_collections=0.0, available_redemption_collections=0.0)
+        payment_context = PaymentContext(pool_balance=10e6, available_revenue_collections=0.0, available_redemption_collections=0.0, revenue_collections=0.0, redemption_collections=0.0,)
         period = 1
 
         result = self.fee.apply_revenue_due(payment_context, period)
@@ -201,7 +201,7 @@ class TestFeeDistribution(unittest.TestCase):
             payment_periods=[1, 3]  # Only due in periods 1 and 3
         )
 
-        payment_context = PaymentContext(pool_balance=10e6, available_revenue_collections=10000.0, available_redemption_collections=0.0)
+        payment_context = PaymentContext(pool_balance=10e6, available_revenue_collections=10000.0, available_redemption_collections=0.0, revenue_collections=0.0, redemption_collections=0.0,)
 
         # Period 1 should distribute
         result_period_1 = fee.apply_revenue_due(payment_context, 1)

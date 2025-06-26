@@ -1,8 +1,7 @@
 
-
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 from typing import TypedDict, Dict
+from dataclasses import dataclass, field
 
 
 ### RESULT DATA STRUCTURES ###
@@ -31,15 +30,41 @@ class WaterfallLimbResult(TypedDict):
     available_cash: float
     amount_due: float
     amount_paid: float
-    amount_unpaid: float
+    amount_unpaid: float   
 
 ### PAYMENT CONTEXT ###
 @dataclass
+class RawPaymentContext:
+    revenue_collections: float
+    redemption_collections: float
+    pool_balance: float
+
+@dataclass
 class PaymentContext:
+    payment_context: RawPaymentContext
+    
     available_revenue_collections: float
     available_redemption_collections: float
-    pool_balance: float
-    principal_allocations: Dict[str, float] = field(default_factory=dict)
+    last_period_tranche_ending_balance_total: float
+    last_period_liquidity_reserve_balance: float
+
+    #defaults 
+    principal_allocations: Dict[str, float] = field(default_factory=dict)    
+    shortfall: float = field(default_factory=float)
+
+    #accessing RawPaymentContext attributes
+    @property
+    def pool_balance(self):
+        return self.payment_context.pool_balance
+
+    @property
+    def revenue_collections(self):
+        return self.payment_context.revenue_collections
+
+    @property
+    def redemption_collections(self):
+        return self.payment_context.redemption_collections
+    
 
 ### BASE ABSTRACT INTERFACES ###
 class RevenueWaterfallLimb(ABC):
@@ -47,7 +72,14 @@ class RevenueWaterfallLimb(ABC):
     Abstract base class representing a limb in the revenue waterfall.
     All limbs must implement the `distribute_due` method and `name` property.
     """
-    
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """
+        Returns the name identifier of the limb.
+        """
+        pass
+
     @abstractmethod
     def apply_revenue_due(self, *args, **kwargs) -> ApplyRevenueDueResult:
         """
@@ -62,14 +94,15 @@ class RevenueWaterfallLimb(ABC):
         This method can be overridden by subclasses to implement specific history tracking.
         """
         pass
-     
-    @property
+
     @abstractmethod
-    def name(self) -> str:
-        """
-        Returns the name identifier of the limb.
-        """
+    def update_last_period(self, due: float, paid: float, unpaid: float):
         pass
+    
+    @abstractmethod
+    def update_totals(self, paid: float, unpaid: float):
+        pass
+     
 
 class RedemptionWaterfallLimb(ABC):
     """
@@ -92,7 +125,6 @@ class RedemptionWaterfallLimb(ABC):
         """
         pass
 
-     
     @property
     @abstractmethod
     def name(self) -> str:
@@ -100,7 +132,6 @@ class RedemptionWaterfallLimb(ABC):
         Returns the name identifier of the limb.
         """
 
-### WATERFALL WRAPPERS ###
 class RevenueProcessor(RevenueWaterfallLimb):
     """
     Processor for Revenue Waterfall limbs, wrapping Tranche logic.
@@ -122,6 +153,12 @@ class RevenueProcessor(RevenueWaterfallLimb):
         Updates the history of payments for this limb.
         """
         self._limb.update_history_revenue_distributions(period, due, paid, unpaid)
+
+    def update_last_period(self, due: float, paid: float, unpaid: float):
+        self._limb.update_last_period
+    
+    def update_totals(self, paid: float, unpaid: float):
+        self._limb.update_totals
 
 class RedemptionProcessor(RedemptionWaterfallLimb):
     """

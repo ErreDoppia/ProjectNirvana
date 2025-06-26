@@ -4,8 +4,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .tranche import Tranche
     from .fees import Fee
+    from .reserve import NonLiquidityReserve
     from .models import RevenueWaterfallLimb, RedemptionWaterfallLimb
-    from .waterfalls import RevenueWaterfall, RedemptionWaterfall
+
 
 ### DEAL CLASS ###
 class Deal:
@@ -17,6 +18,7 @@ class Deal:
                 name: str, 
                 tranches: 'list[Tranche]', 
                 fees: 'list[Fee]', 
+                reserve: 'NonLiquidityReserve',
                 repayment_structure: str,
                 revenue_waterfall_limbs: 'dict[int, RevenueWaterfallLimb]', 
                 redemption_waterfall_limbs: 'dict[int, RedemptionWaterfallLimb]'
@@ -25,6 +27,7 @@ class Deal:
         self.name = name
         self.tranches = tranches
         self.fees = fees
+        self.reserve = reserve
 
         if repayment_structure not in ['sequential', 'pro-rata']:
             raise ValueError('Invalid repayment structure. Must be "sequential" or "pro-rata".')

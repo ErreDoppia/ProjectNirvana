@@ -26,6 +26,7 @@ class TestPrincipalAllocationRules(unittest.TestCase):
             fees=[],
             revenue_waterfall_limbs={},
             tranches=[self.tranche_a, self.tranche_b],
+            reserve=None,
             repayment_structure="sequential",
             redemption_waterfall_limbs=self.redemption_waterfall_limbs,
         )
@@ -34,7 +35,9 @@ class TestPrincipalAllocationRules(unittest.TestCase):
         """
         Test principal allocation in sequential mode.
         """
-        payment_context = PaymentContext(available_redemption_collections=1.5e6, available_revenue_collections=0, pool_balance=150e6)
+        payment_context = PaymentContext(redemption_collections=1.5e6, revenue_collections=0, pool_balance=150e6)
+
+        payment_context.available_redemption_collections = 1.5e6
         allocation = PrincipalAllocationRules(self.my_deal.tranches, self.my_deal.repayment_structure).allocate_principal(payment_context)
 
         expected_allocation = {
@@ -49,7 +52,9 @@ class TestPrincipalAllocationRules(unittest.TestCase):
         Test principal allocation in pro-rata mode.
         """
         self.my_deal.repayment_structure = "pro-rata"
-        payment_context = PaymentContext(available_redemption_collections=1.5e6, available_revenue_collections=0, pool_balance=150e6)
+        payment_context = PaymentContext(redemption_collections=1.5e6, revenue_collections=0, pool_balance=150e6)
+
+        payment_context.available_redemption_collections = 1.5e6
         allocation = PrincipalAllocationRules(self.my_deal.tranches, self.my_deal.repayment_structure).allocate_principal(payment_context)
 
         expected_allocation = {

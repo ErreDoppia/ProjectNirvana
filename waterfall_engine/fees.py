@@ -1,12 +1,12 @@
 
-from typing import cast
-from .models import RevenueWaterfallLimb, ApplyRevenueDueResult
-from .models import PaymentContext
+from typing import Dict, List, Optional
+from .models import ApplyRevenueDueResult, PaymentContext
+
 from .settings import FREQ_MULTIPLIER
 
 
 ### FEE ###
-class Fee(RevenueWaterfallLimb):
+class Fee:
     """
         Parameters
         ----------
@@ -24,7 +24,7 @@ class Fee(RevenueWaterfallLimb):
         """
     def __init__(self, name: str, fee_config: dict, 
                  payment_frequency: str, annual: bool = False, 
-                 payment_periods=None):
+                 payment_periods: Optional[List[int]] = None):
         
         self._name = name
 
@@ -39,21 +39,52 @@ class Fee(RevenueWaterfallLimb):
 
         self.annual = annual
         self.payment_periods = payment_periods
+
+        ### Last period 
+        self._last_period_due = 0.0
+        self._last_period_paid = 0.0
+        self._last_period_unpaid = 0.0
+
+        ### Totals
+        self._total_paid = 0.0
+        self._total_unpaid = 0.0
         
-        self.total_paid = 0.0
-        self.total_unpaid = 0.0
+        ### History
         self.history = []
     
+    def __repr__(self):
+        return f"<Fee {self.name}: Last Due={self.last_period_due}, Total Paid={self.total_paid}>"
+
+    ### PROPERTY
     @property
     def name(self):
-        """Returns the name of the fee."""
         return self._name
     
+    @property
+    def last_period_due(self):
+        return self._last_period_due
+    
+    @property
+    def last_period_paid(self):
+        return self._last_period_paid
+    
+    @property
+    def last_period_unpaid(self):
+        return self._last_period_unpaid
+    
+    @property
+    def total_paid(self):
+        return self._total_paid
+    
+    @property
+    def total_unpaid(self):
+        return self._total_unpaid
+
     def amount_due(self, pool_balance: float, period: int) -> float:
         """
         Calculates amount due this period for the fee.
         """
-        if self.payment_periods and period not in self.payment_periods:
+        if self.payment_periods is not None and period not in self.payment_periods:
             return 0.0
         
         if self.fee_config['type'] == 'dollar_amount':
@@ -77,9 +108,6 @@ class Fee(RevenueWaterfallLimb):
         due = self.amount_due(pool_balance, period)
         paid = min(available_revenue_funds, due)
         unpaid = due - paid
-        
-        self.total_paid += paid
-        self.total_unpaid += unpaid
 
         payment_run_return_payload = {
             'amount_due': due,
@@ -89,11 +117,21 @@ class Fee(RevenueWaterfallLimb):
                
         return ApplyRevenueDueResult(**payment_run_return_payload)
     
-    def update_history_revenue_distributions(self, period: int, due: float, paid: float, unpaid: float):
 
+    ### UPDATES 
+    def update_history_revenue_distributions(self, period: int, due: float, paid: float, unpaid: float):
         self.history.append({
                 'period': period, 
                 'amount_due': due,
                 'amount_paid': paid, 
                 'amount_unpaid': unpaid
                 })
+        
+    def update_last_period(self, due: float, paid: float, unpaid: float):
+        self._last_period_due = due
+        self._last_period_paid = paid
+        self._last_period_unpaid = unpaid
+
+    def update_totals(self, paid: float, unpaid: float):
+        self._total_paid += paid
+        self._total_unpaid += unpaid

@@ -10,8 +10,9 @@ from .deal import Deal
 from .models import RevenueWaterfallLimb, RedemptionWaterfallLimb
 from .waterfalls import RevenueWaterfall, RedemptionWaterfall
 from .models import ApplyRevenueDueResult, ApplyRedemptionDueResult
-from .models import PaymentContext, WaterfallLimbResult
+from .models import PaymentContext, RawPaymentContext, WaterfallLimbResult
 from .calculations import PrincipalAllocationRules   
+from .context import PaymentContextPrepper
 
 
 ### RUN WATERFALL ENGINE ###
@@ -22,6 +23,7 @@ class RunWaterfall:
         """
         self.deal = deal
 
+        self._prep_payment_context = PaymentContextPrepper(self.deal)
         self._revenue_waterfall = RevenueWaterfall(self.deal.revenue_waterfall_limbs)
         self._redemption_waterfall = RedemptionWaterfall(self.deal.redemption_waterfall_limbs)
 
@@ -54,7 +56,7 @@ class RunWaterfall:
 
     def update_revenue_waterfall_limbs_history(self, period: int, revenue_results: dict[str, WaterfallLimbResult]):
         """
-        Updates the relevant waterfall limb history for the deal based on the revenue results.
+        Updates the relevant revenue waterfall limb history for the deal based on the revenue results.
         """
         for i, limb in enumerate(self.deal.revenue_waterfall_limbs.values(), start=1):
             if isinstance(limb, RevenueWaterfallLimb):
@@ -67,7 +69,7 @@ class RunWaterfall:
                     unpaid=revenue_results.get(limb_key, {}).get('amount_unpaid', 0.0)
                 )
 
-    def update_tranches_last_period_interest(self, period, revenue_results: dict[str, WaterfallLimbResult]):
+    def update_tranches_last_period_interest(self, revenue_results: dict[str, WaterfallLimbResult]):
         """
         Updates each tranche's last paid and unpaid interest amounts based on the revenue waterfall results.
         """
@@ -75,11 +77,12 @@ class RunWaterfall:
             limb_name = tranche.name
             limb_key = f"{i} - {limb_name}"
             tranche.update_last_paid_and_last_unpaid_interest(
+                due=revenue_results.get(limb_key, {}).get('amount_due', 0.0),
                 paid=revenue_results.get(limb_key, {}).get('amount_paid', 0.0),
                 unpaid=revenue_results.get(limb_key, {}).get('amount_unpaid', 0.0)
             )
 
-    def update_tranches_total_interest(self, period, revenue_results: dict[str, WaterfallLimbResult]):
+    def update_tranches_total_interest(self, revenue_results: dict[str, WaterfallLimbResult]):
         """
         Updates each tranche's total paid and unpaid interest amounts based on the revenue waterfall results.
         """
@@ -91,33 +94,72 @@ class RunWaterfall:
                 unpaid=revenue_results.get(limb_key, {}).get('amount_unpaid', 0.0)
             )
 
-
-    def allocate_principal(self, payment_context: PaymentContext) -> dict[str, float]:
+    def update_redemption_waterfall_limbs_history(self, period: int, redemption_results: dict[str, WaterfallLimbResult]):
         """
-        Allocates principal payments based on the repayment structure of the deal.
-        Returns a dictionary of principal allocations per tranche.
+        Updates the relevant redemption waterfall limb history for the deal based on the redemption results.
         """
-        principal_allocations = PrincipalAllocationRules(self.deal.tranches, self.deal.repayment_structure).allocate_principal(payment_context)
-        payment_context.principal_allocations = principal_allocations
-        return principal_allocations
+        for i, limb in enumerate(self.deal.redemption_waterfall_limbs.values(), start=1):
+            if isinstance(limb, RevenueWaterfallLimb):
+                limb_name = limb.name
+                limb_key = f"{i} - {limb_name}"
+                limb.update_history_revenue_distributions(
+                    period=period,
+                    due=redemption_results.get(limb_key, {}).get('amount_due', 0.0),
+                    paid=redemption_results.get(limb_key, {}).get('amount_paid', 0.0),
+                    unpaid=redemption_results.get(limb_key, {}).get('amount_unpaid', 0.0)
+                )
+                
+    def update_tranches_last_period_principal(self, redemption_results: dict[str, WaterfallLimbResult]):
+        """
+        Updates each tranche's last paid principal and balance based on the revenue waterfall results.
+        """
+        for i, tranche in enumerate(self.deal.tranches, start=1):
+            limb_name = tranche.name
+            limb_key = f"{i} - {limb_name}"
+            tranche.update_last_period_principal(
+                redemption_results.get(limb_key, {}).get('amount_paid', 0.0),
+                redemption_results.get(limb_key, {}).get('amount_unpaid', 0.0))
+        
+    def update_tranche_internal_states(
+        self, revenue_results: dict[str, WaterfallLimbResult], 
+        redemption_results: dict[str, WaterfallLimbResult]):
+        """
+        General method to update Tranche's internal states after payment run
+        """
+        self.update_tranches_last_period_interest(revenue_results)
+        self.update_tranches_total_interest(revenue_results)
+        self.update_tranches_last_period_principal(redemption_results)
 
-    def run_IPD(self, payment_context: PaymentContext, period: int):
+    def prep_IPD(self, raw_payment_context: RawPaymentContext):
+        """
+        Updates payment context for the run_IPD method
+        """
+        prep_pmt_ctx = self._prep_payment_context.prep_payment_context(raw_payment_context)
+
+        return prep_pmt_ctx
+
+    def run_IPD(self, payment_context: RawPaymentContext, period: int):
         """
         Executes one Interest Payment Date logic.
         """
-        principal_allocations = self.allocate_principal(payment_context)
 
-        if payment_context.principal_allocations == principal_allocations:
-            # Apply revenue and redemption waterfalls
-            rev_waterfall_results = self.apply_revenue_waterfall(payment_context, period)
-            red_waterfall_results = self.apply_redemption_waterfall(payment_context, period)
-        else:
-            raise ValueError("Principal allocations do not match expected allocations.")
+        ## 1. Prepping context 
+        prepped_payment_context = self.prep_IPD(payment_context)
+
+        ## 2. Running Revenue and Redemption Waterfalls
+        rev_waterfall_results = self.apply_revenue_waterfall(prepped_payment_context, period)
+        red_waterfall_results = self.apply_redemption_waterfall(prepped_payment_context, period)
         
+        ## X. Update history
         # Update deal history with results
         self.update_deal_history(period, rev_waterfall_results, red_waterfall_results)
+
+        # Update waterfall limbs history with 
         self.update_revenue_waterfall_limbs_history(period, rev_waterfall_results)
-        self.update_tranches_last_period_interest(period, rev_waterfall_results)
+        self.update_redemption_waterfall_limbs_history(period, red_waterfall_results)
+
+        # Update tranche internal states
+        self.update_tranche_internal_states(rev_waterfall_results, red_waterfall_results)
 
         print(f"IPD number {period}")
         print(f"Interest: {self.deal.history_revenue[period-1]}")
@@ -125,7 +167,7 @@ class RunWaterfall:
         print(f"Principal: {self.deal.history_redemption[period-1]}")
         print("")
         
-    def run_all_IPDs(self, payment_contexts: list[PaymentContext]):
+    def run_all_IPDs(self, payment_contexts: list[RawPaymentContext]):
         """
         Executes all Interest Payment Dates for the given payment context.
         """

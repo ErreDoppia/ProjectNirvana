@@ -1,10 +1,8 @@
 
-
 from typing import cast
 from .settings import FREQ_MULTIPLIER
 from .calculations import InterestAmountCalculation
-from .models import ApplyRevenueDueResult, ApplyRedemptionDueResult
-from .models import PaymentContext
+from .models import ApplyRevenueDueResult, ApplyRedemptionDueResult, PaymentContext
 
 
 ### TRANCHE CLASS ###
@@ -97,18 +95,17 @@ class Tranche:
 
         ### Principal
         self._last_period_ending_balance = self.initial_balance 
+        self._last_period_paid_principal = 0.0
         self._current_period_ending_balance = 0.0
 
-        self._last_period_paid_principal = 0.0
-
-        ### Logging ###
-        self.total_paid_interest = 0.0
-        self.total_unpaid_interest = 0.0
+        ### Totals
+        self._total_paid_interest = 0.0
+        self._total_unpaid_interest = 0.0
 
         self.history_interest = []
         self.history_principal = []
 
-    ## PROPERTIES ##  
+    ### PROPERTIES  
     @property
     def name(self):
         """Returns the name of the tranche."""
@@ -198,38 +195,21 @@ class Tranche:
 
     def update_history_revenue_distributions(self, period: int, due: float, paid: float, unpaid: float):
         """Stores interest history for analysis or reporting."""
+        
+        current_interest_due = self.current_interest_due(period)
         arrears = self.last_period_unpaid_interest
         interest_on_arrears = self.current_interest_on_last_period_unpaid_interest(period)
-        total_due = paid + unpaid
-                        
+                                
         self.history_interest.append({
             'period': period, 
-            'current_interest_due': due, 
+            'current_interest_due': current_interest_due, 
             'last_period_unpaid_interest': arrears,
             'interest_on_last_period_unpaid_interest': interest_on_arrears,
-            'total_interest_due': total_due, 
+            'total_interest_due': due, 
             'current_period_distribution': paid, 
             'current_period_unpaid_interest': unpaid
             })
-    
-    def update_last_paid_and_last_unpaid_interest(self, paid: float, unpaid: float):      
-        """Tracks last period paid/unpaid interest."""
-        self._last_period_paid_interest = paid
-        self._last_period_unpaid_interest = unpaid
-    
-    def update_total_paid_and_total_unpaid_interest(self, paid: float, unpaid: float):
-        """Accumulates total paid/unpaid interest over time."""
-        self.total_paid_interest += paid
-        self.total_unpaid_interest += unpaid
-
-    def update_last_period_ending_balance(self, unpaid: float):
-        """Updates balance for principal repayment period."""
-        self._last_period_ending_balance = unpaid
-
-    def update_last_period_paid_principal(self, paid):
-        """Stores principal paid in last period."""
-        self._last_period_paid_principal = paid               
-
+        
     def update_history_redemption_distributions(self, period: int, paid: float, unpaid: float):
         """Stores principal payment history."""
         self.history_principal.append({
@@ -238,6 +218,22 @@ class Tranche:
             'current_period_repayments': paid,
             'current_period_ending_balance': unpaid
         })
+    
+    def update_last_paid_and_last_unpaid_interest(self, due: float, paid: float, unpaid: float):      
+        """Tracks last period paid/unpaid interest."""
+        self._last_period_due_interest = due
+        self._last_period_paid_interest = paid
+        self._last_period_unpaid_interest = unpaid
+    
+    def update_total_paid_and_total_unpaid_interest(self, paid: float, unpaid: float):
+        """Accumulates total paid/unpaid interest over time."""
+        self._total_paid_interest += paid
+        self._total_unpaid_interest += unpaid
+
+    def update_last_period_principal(self, paid: float, unpaid: float):
+        """Updates balance for principal repayment period."""
+        self._last_period_ending_balance = unpaid
+        self._last_period_paid_principal = paid               
 
     # Distribution methods for Revenue and Redemption Waterfall limbs    
     def apply_revenue_due(self, payment_context: PaymentContext, period: int) -> ApplyRevenueDueResult:
@@ -256,9 +252,7 @@ class Tranche:
             'revenue_funds_distributed' : revenue_funds_distributed,
             'revenue_amount_unpaid' : interest_unpaid,
         }
-        
-        self.update_total_paid_and_total_unpaid_interest(revenue_funds_distributed, interest_unpaid)
-        
+                
         return ApplyRevenueDueResult(**payment_run_return_payload)
 
     def apply_redemption_due(self, payment_context: PaymentContext, period: int) -> ApplyRedemptionDueResult:
@@ -276,9 +270,4 @@ class Tranche:
             'redemption_amount_unpaid' : redemption_amount_unpaid,
         }
         
-        # update class trackers
-        self.update_history_redemption_distributions(period, redemption_funds_distributed, redemption_amount_unpaid)
-        self.update_last_period_paid_principal(redemption_funds_distributed)
-        self.update_last_period_ending_balance(redemption_amount_unpaid)
-
         return ApplyRedemptionDueResult(**payment_run_return_payload)

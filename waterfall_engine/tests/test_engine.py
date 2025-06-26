@@ -3,6 +3,7 @@ import unittest
 from waterfall_engine.engine import Deal, RunWaterfall
 from waterfall_engine.tranche import Tranche
 from waterfall_engine.fees import Fee  
+from waterfall_engine.reserve import NonLiquidityReserve
 from waterfall_engine.models import PaymentContext, RevenueProcessor, RedemptionProcessor
 from waterfall_engine.waterfalls import RevenueWaterfall, RedemptionWaterfall
 
@@ -19,6 +20,8 @@ class TestDealInitialization(unittest.TestCase):
         """
         tranche_a = Tranche("A", 100e6, 0, 1.1/100, 60, "Q")
         tranche_b = Tranche("B", 50e6, 0, 2/100, 60, "Q")
+
+        non_liq_res = NonLiquidityReserve(name="non_liquidity_reserve", initial_balance=0.0, required_percentage=0.0, method="pool_balance")
 
         issuer_profit = Fee(name="issuer_profit", fee_config={"type": "dollar_amount", "amount": 250.0}, payment_frequency="Q")
         servicer_fee = Fee("servicer", {"type": "percentage", "amount": 0.01}, "Q", True)
@@ -39,6 +42,7 @@ class TestDealInitialization(unittest.TestCase):
             name="RR25-1",
             tranches=[tranche_a, tranche_b],
             fees=[issuer_profit, servicer_fee],
+            reserve=non_liq_res,
             repayment_structure="pro-rata",
             revenue_waterfall_limbs=revenue_waterfall_limbs, 
             redemption_waterfall_limbs=redemption_waterfall_limbs,
@@ -59,8 +63,11 @@ class TestDealInitialization(unittest.TestCase):
         payment_context = [PaymentContext(
             available_revenue_collections=1000000,
             available_redemption_collections=0,
+            revenue_collections=1000000,
+            redemption_collections=0.0,
             pool_balance=150e6,
-            principal_allocations={"A": 5e6, "B": 5e6}
+            principal_allocations={"A": 5e6, "B": 5e6},
+            last_period_liquidity_reserve_balance=0.0
         ) for _ in range(10)]  # Simulating 10 quarters of payments
 
         RunWaterfall(self.my_deal).run_all_IPDs(payment_context)
@@ -83,11 +90,13 @@ class TestDealInitialization(unittest.TestCase):
         """
 
         payment_context = [PaymentContext(
-            available_revenue_collections=0,
-            available_redemption_collections=1.5e6,
+            available_revenue_collections=0.0,
+            available_redemption_collections=0,
+            revenue_collections=1000000,
+            redemption_collections=1.5e6,
             pool_balance=150e6,
-            principal_allocations={"A": 1e6, "B": 0.5e6}
-        ) for _ in range(10)]
+            last_period_liquidity_reserve_balance=0.0            
+        ) for _ in range(10)]  # Simulating 10 quarters of payments
 
         RunWaterfall(self.my_deal).run_all_IPDs(payment_context)
 
@@ -118,11 +127,13 @@ class TestDealInitialization(unittest.TestCase):
         self.my_deal.repayment_structure = "sequential"
 
         payment_context = [PaymentContext(
-            available_revenue_collections=0,
-            available_redemption_collections=1.5e6,
+            available_revenue_collections=0.0,
+            available_redemption_collections=0,
+            revenue_collections=1.5e6,
+            redemption_collections=1.5e6,
             pool_balance=150e6,
-            principal_allocations={"A": 1.5e6, "B": 0.0}
-        ) for _ in range(10)]
+            last_period_liquidity_reserve_balance=0.0
+        ) for _ in range(10)]  # Simulating 10 quarters of payments
 
         RunWaterfall(self.my_deal).run_all_IPDs(payment_context)
 
