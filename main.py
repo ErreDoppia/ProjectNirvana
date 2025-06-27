@@ -1,9 +1,9 @@
 
 from waterfall_engine.deal import Deal
-from waterfall_engine.engine import RunWaterfall
 from waterfall_engine.tranche import Tranche
 from waterfall_engine.fees import Fee
-from waterfall_engine.models import RevenueProcessor, RedemptionProcessor, PaymentContext, RawPaymentContext
+from waterfall_engine.engine import WaterfallEngine
+from waterfall_engine.models import WaterfallProcessor, RawPaymentContext
 from waterfall_engine.reserve import NonLiquidityReserve
 
 
@@ -18,16 +18,16 @@ servicer_fee = Fee("servicer", {"type": "percentage", "amount": 0.01}, "Q", True
 
 ### TODO CREATE A WATERFALL CONSTRUCTOR
 revenue_waterfall_limbs = {
-    1: RevenueProcessor(issuer_profit),
-    2: RevenueProcessor(servicer_fee), 
-    3: RevenueProcessor(tranche_a),
-    4: RevenueProcessor(non_liq_res),
-    5: RevenueProcessor(tranche_b)
+    1: WaterfallProcessor(issuer_profit),
+    2: WaterfallProcessor(servicer_fee), 
+    3: WaterfallProcessor(tranche_a),
+    4: WaterfallProcessor(non_liq_res),
+    5: WaterfallProcessor(tranche_b)
 }
     
 redemption_waterfall_limbs = {
-    1: RedemptionProcessor(tranche_a),
-    2: RedemptionProcessor(tranche_b),
+    1: WaterfallProcessor(tranche_a),
+    2: WaterfallProcessor(tranche_b),
 }
 
 my_deal = Deal(
@@ -36,8 +36,7 @@ my_deal = Deal(
     fees=[issuer_profit, servicer_fee],
     reserve=non_liq_res,
     repayment_structure="pro-rata",
-    revenue_waterfall_limbs=revenue_waterfall_limbs, 
-    redemption_waterfall_limbs=redemption_waterfall_limbs,
+    waterfalls={'revenue': revenue_waterfall_limbs, 'redemption':redemption_waterfall_limbs}
     )
 
 # Run a few periods
@@ -47,4 +46,4 @@ payment_context: list[RawPaymentContext] = [
     RawPaymentContext(redemption_collections=1.5e6, revenue_collections=1e6, pool_balance=150e6)
 ]
 
-RunWaterfall(my_deal).run_all_IPDs(payment_context)
+WaterfallEngine(my_deal).run_all_IPDs(payment_context)

@@ -2,7 +2,8 @@
 
 import unittest
 from waterfall_engine.fees import Fee
-from waterfall_engine.models import PaymentContext
+from waterfall_engine.models import RawPaymentContext, PaymentContext
+from waterfall_engine.context import PaymentContextPrepper
 
 
 class TestFeeAmountsDue(unittest.TestCase):
@@ -140,20 +141,29 @@ class TestFeeDistribution(unittest.TestCase):
         """
         Test the distribution of fee payments over multiple periods and verify history.
         """
+        raw_pmt_ctx = [RawPaymentContext(revenue_collections=10000.0, redemption_collections=0.0,pool_balance=10e6),
+                       RawPaymentContext(revenue_collections=500.0, redemption_collections=0.0,pool_balance=10e6),
+                       RawPaymentContext(revenue_collections=10000.0, redemption_collections=0.0,pool_balance=10e6)]
+
         payment_context = [
-            PaymentContext(available_revenue_collections=10000.0, available_redemption_collections=0.0, revenue_collections=0.0, redemption_collections=0.0, pool_balance=10e6),
-            PaymentContext(available_revenue_collections=500.0, available_redemption_collections=0.0, revenue_collections=0.0, redemption_collections=0.0, pool_balance=10e6),
-            PaymentContext(available_revenue_collections=10000.0, available_redemption_collections=0.0, revenue_collections=0.0, redemption_collections=0.0, pool_balance=10e6)
+            PaymentContext(raw_payment_context=raw_pmt_ctx[0], available_cash=10000, last_period_liquidity_reserve_balance=0.0, 
+                           last_period_tranche_ending_balance_total=0.0),
+            PaymentContext(raw_payment_context=raw_pmt_ctx[1], available_cash=500, last_period_liquidity_reserve_balance=0.0, 
+                           last_period_tranche_ending_balance_total=0.0),
+            PaymentContext(raw_payment_context=raw_pmt_ctx[2], available_cash=10000, last_period_liquidity_reserve_balance=0.0, 
+                           last_period_tranche_ending_balance_total=0.0)
         ]
         
+
+
         expected_history = []
 
         # Simulate fee distribution for each period and build expected history
         for i, context in enumerate(payment_context, start=1):
-            self.fee.apply_revenue_due(context, i)
+            self.fee.apply_amount_due(context, i, 'revenue')
 
             due = 1e3
-            paid = min(context.available_revenue_collections, due)
+            paid = min(context.revenue_collections, due)
             unpaid = due - paid
 
             expected_history.append({
@@ -175,15 +185,17 @@ class TestFeeDistribution(unittest.TestCase):
         """
         Test fee distribution when no funds are available.
         """
-        payment_context = PaymentContext(pool_balance=10e6, available_revenue_collections=0.0, available_redemption_collections=0.0, revenue_collections=0.0, redemption_collections=0.0,)
+        payment_context = PaymentContext(
+            RawPaymentContext(pool_balance=10e6, revenue_collections=0.0, redemption_collections=0.0), 
+            available_cash=0.0, last_period_liquidity_reserve_balance=0.0, last_period_tranche_ending_balance_total=0.0)
         period = 1
 
-        result = self.fee.apply_revenue_due(payment_context, period)
+        result = self.fee.apply_amount_due(payment_context, period, 'revenue')
 
         expected_result = {
             'amount_due': 1000.0,
-            'revenue_funds_distributed': 0.0,
-            'revenue_amount_unpaid': 1000.0
+            'amount_paid': 0.0,
+            'amount_unpaid': 1000.0
         }
 
         self.assertEqual(result, expected_result, 
@@ -201,22 +213,24 @@ class TestFeeDistribution(unittest.TestCase):
             payment_periods=[1, 3]  # Only due in periods 1 and 3
         )
 
-        payment_context = PaymentContext(pool_balance=10e6, available_revenue_collections=10000.0, available_redemption_collections=0.0, revenue_collections=0.0, redemption_collections=0.0,)
+        payment_context = PaymentContext(
+            RawPaymentContext(pool_balance=10e6, revenue_collections=10000.0, redemption_collections=0.0), 
+            available_cash=10e3, last_period_liquidity_reserve_balance=0.0, last_period_tranche_ending_balance_total=0.0)
 
         # Period 1 should distribute
-        result_period_1 = fee.apply_revenue_due(payment_context, 1)
-        self.assertEqual(result_period_1['revenue_funds_distributed'], 1000.0)
-        self.assertEqual(result_period_1['revenue_amount_unpaid'], 0.0)
+        result_period_1 = fee.apply_amount_due(payment_context, 1, 'revenue')
+        self.assertEqual(result_period_1['amount_paid'], 1000.0)
+        self.assertEqual(result_period_1['amount_unpaid'], 0.0)
 
         # Period 2 should not distribute
-        result_period_2 = fee.apply_revenue_due(payment_context, 2)
-        self.assertEqual(result_period_2['revenue_funds_distributed'], 0.0)
-        self.assertEqual(result_period_2['revenue_amount_unpaid'], 0.0)
+        result_period_2 = fee.apply_amount_due(payment_context, 2, 'revenue')
+        self.assertEqual(result_period_2['amount_paid'], 0.0)
+        self.assertEqual(result_period_2['amount_unpaid'], 0.0)
 
         # Period 3 should distribute
-        result_period_3 = fee.apply_revenue_due(payment_context, 3)
-        self.assertEqual(result_period_3['revenue_funds_distributed'], 1000.0)
-        self.assertEqual(result_period_3['revenue_amount_unpaid'], 0.0)
+        result_period_3 = fee.apply_amount_due(payment_context, 3, 'revenue')
+        self.assertEqual(result_period_3['amount_paid'], 1000.0)
+        self.assertEqual(result_period_3['amount_unpaid'], 0.0)
 
 if __name__ == '__main__':
     unittest.main()

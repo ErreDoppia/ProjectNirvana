@@ -1,5 +1,5 @@
 
-from waterfall_engine.models import ApplyRevenueDueResult, PaymentContext
+from waterfall_engine.models import ApplyAmountDueResult, PaymentContext
 
 
 """
@@ -50,19 +50,19 @@ class NonLiquidityReserve:
     def last_period_balance(self):
         return self._last_period_balance
     
-    def apply_revenue_due(self, payment_context: PaymentContext, period: int) -> ApplyRevenueDueResult:
+    def apply_amount_due(self, payment_context: PaymentContext, period: int, waterfall_type: str) -> ApplyAmountDueResult:
 
-        available_revenue_funds = payment_context.available_revenue_collections
+        available_revenue_funds = payment_context.available_cash
         due = self.get_required_amount(payment_context)
         paid = min(available_revenue_funds, due)
         unpaid = due - paid
 
         payment_run_return_payload = {
             'amount_due': due,
-            'revenue_funds_distributed' : paid,
-            'revenue_amount_unpaid' : unpaid,
+            'amount_paid' : paid,
+            'amount_unpaid' : unpaid,
         }   
-        return ApplyRevenueDueResult(**payment_run_return_payload)
+        return ApplyAmountDueResult(**payment_run_return_payload)
 
     def get_required_amount(self, payment_context: PaymentContext):
         return round(self.required_percentage * payment_context.last_period_tranche_ending_balance_total,2)

@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from .tranche import Tranche
     from .fees import Fee
     from .reserve import NonLiquidityReserve
-    from .models import RevenueWaterfallLimb, RedemptionWaterfallLimb
+    from .models import WaterfallLimb
 
 
 ### DEAL CLASS ###
@@ -20,8 +20,7 @@ class Deal:
                 fees: 'list[Fee]', 
                 reserve: 'NonLiquidityReserve',
                 repayment_structure: str,
-                revenue_waterfall_limbs: 'dict[int, RevenueWaterfallLimb]', 
-                redemption_waterfall_limbs: 'dict[int, RedemptionWaterfallLimb]'
+                waterfalls: 'dict[str, dict[int, WaterfallLimb]]',
                 ):
         
         self.name = name
@@ -33,8 +32,14 @@ class Deal:
             raise ValueError('Invalid repayment structure. Must be "sequential" or "pro-rata".')
         self.repayment_structure = repayment_structure
 
-        self.revenue_waterfall_limbs = revenue_waterfall_limbs
-        self.redemption_waterfall_limbs = redemption_waterfall_limbs
+        valid_keys = {'revenue', 'redemption'}
+        if not set(waterfalls.keys()).issubset(valid_keys):
+            raise ValueError('Invalid waterfall key. Must be "revenue" or "redemption".')
+        
+        self.waterfalls = waterfalls
+
+        self.revenue_waterfall_limbs = waterfalls.get('revenue')
+        self.redemption_waterfall_limbs = waterfalls.get('redemption')
 
         self.history_revenue = []
         self.history_redemption = []

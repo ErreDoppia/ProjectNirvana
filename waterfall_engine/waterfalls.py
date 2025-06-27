@@ -1,83 +1,46 @@
  
-from .models import PaymentContext, RevenueWaterfallLimb, RedemptionWaterfallLimb, WaterfallLimbResult
+from .models import RawPaymentContext, WaterfallLimbResult
+from .models import WaterfallLimb, WaterfallLimbResult, WaterfallProcessor
+from .context import PaymentContextHandler 
 
-### REVENUE AND REDEMPTION WATERFALLS ###
-class RevenueWaterfall:
+
+### WATERFALLS ###
+class WaterfallCalculator:
     """
     Revenue waterfall logic for payment allocation in RunWaterfall engine.
     """
-    def __init__(self, waterfall_limbs: dict[int, RevenueWaterfallLimb]):
+    def __init__(self, waterfall_limbs: dict[int, WaterfallLimb]):
         """
         Initialize with an ordered dictionary of waterfall limbs.
         """
         self.limbs = waterfall_limbs
-        
-    def apply(self, payment_context: PaymentContext, period: int) -> dict[str, WaterfallLimbResult]:
+       
+    def flush(self, payment_context: RawPaymentContext, period: int, waterfall_type: str) -> dict[str, WaterfallLimbResult]:
         """
         Applies collections to each limb by priority.
         """
         results = {}
-            
+
         for priority, limb in self.limbs.items(): 
             name = limb.name
-            payment_run_payload = limb.apply_revenue_due(payment_context, period)
+            payment_run_payload = limb.apply_amount_due(payment_context, period, waterfall_type)
             
-            revenue_funds_distributed = payment_run_payload.get('revenue_funds_distributed')
-            amount_unpaid = payment_run_payload.get('revenue_amount_unpaid')
+            amount_paid = payment_run_payload.get('amount_paid') or 0.0 ### TODO Implement better value checks
+            amount_unpaid = payment_run_payload.get('amount_unpaid')
             
             results[f"{priority} - {name}"] = {
-                'available_cash': payment_context.available_revenue_collections,
-                'amount_paid': revenue_funds_distributed,
+                'available_cash': payment_context.available_cash,
+                'amount_paid': amount_paid,
                 'amount_unpaid': amount_unpaid
                 }
             
-            payment_context.available_revenue_collections = max(
-                payment_context.available_revenue_collections - revenue_funds_distributed, 0)
+            available_cash = payment_context.available_cash or 0.0
+
+            payment_context.available_cash = max(available_cash - amount_paid, 0)
         
-        results['excess_spread'] = {
-            'available_cash': payment_context.available_revenue_collections,
-            'amount_paid': payment_context.available_revenue_collections,
+        results['surplus'] = {
+            'available_cash': payment_context.available_cash or 0.0,
+            'amount_paid': payment_context.available_cash or 0.0,
             'amount_unpaid': 0.00
             }
         return results  
-
-
-class RedemptionWaterfall:
-    """
-    Redemption waterfall logic for payment allocation in RunWaterfall engine.
-    """
-    def __init__(self, waterfall_limbs: dict[int, RedemptionWaterfallLimb]):
-        """
-        Initialize with an ordered dictionary of waterfall limbs.
-        """
-        self.limbs = waterfall_limbs
-        
-    def apply(self, payment_context: PaymentContext, period: int) -> dict[str, WaterfallLimbResult]:
-        """
-        Applies collections to each limb by priority.
-        """
-        results = {}
-            
-        for priority, limb in self.limbs.items(): 
-            name = limb.name
-            payment_run_payload = limb.apply_redemption_due(payment_context, period)
-            
-            redemption_funds_distributed = payment_run_payload.get('redemption_funds_distributed')
-            amount_unpaid = payment_run_payload.get('redemption_amount_unpaid')
-
-            results[f"{priority} - {name}"] = {
-                'available_cash': payment_context.available_redemption_collections,
-                'amount_paid': redemption_funds_distributed,
-                'amount_unpaid': amount_unpaid
-                }
-            
-            payment_context.available_redemption_collections = max(
-                payment_context.available_redemption_collections - redemption_funds_distributed, 0.0)
-
-        results['excess_spread'] = {
-            'available_cash': payment_context.available_redemption_collections,
-            'amount_paid': payment_context.available_redemption_collections,
-            'amount_unpaid': 0.00
-            }
-        
-        return results

@@ -23,7 +23,7 @@ class PrincipalAllocationRules:
         Allocates principal repayments across tranches in a sequential manner.
         This method is currently not used but can be extended for future use.
         """
-        available_funds = payment_context.available_redemption_collections
+        available_funds = payment_context.available_cash
         allocation: dict[str, float] = {}
 
         last_period_ending_balance = [tranche.last_period_ending_balance for tranche in self.tranches]
@@ -47,7 +47,7 @@ class PrincipalAllocationRules:
         Allocates principal repayments across tranches in a pro-rata manner.
         This method is currently not used but can be extended for future use.
         """
-        available_funds = payment_context.available_redemption_collections
+        available_funds = payment_context.available_cash
 
         # Pro-rata allocation weights based on last period ending balance
         weights = {
@@ -60,13 +60,12 @@ class PrincipalAllocationRules:
 
         return weights
 
-
     def allocate_principal(self, payment_context: PaymentContext) -> dict[str, float]:
         """
         Allocates principal repayments across tranches based on the defined structure.
         Currently supports only sequential allocation.
         """
-        available_funds = payment_context.available_redemption_collections
+        available_funds = payment_context.available_cash
 
         if self.repayment_structure == 'sequential':
             weights = self.get_sequential_weights(payment_context)

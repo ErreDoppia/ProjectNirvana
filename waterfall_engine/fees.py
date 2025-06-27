@@ -1,6 +1,6 @@
 
 from typing import Dict, List, Optional
-from .models import ApplyRevenueDueResult, PaymentContext
+from .models import ApplyAmountDueResult, PaymentContext
 
 from .settings import FREQ_MULTIPLIER
 
@@ -98,25 +98,24 @@ class Fee:
         else:
             return dollar_amount_due
     
-    def apply_revenue_due(self, payment_context: PaymentContext, period: int) -> ApplyRevenueDueResult: 
+    def apply_amount_due(self, payment_context: PaymentContext, period: int, waterfall_type: str) -> ApplyAmountDueResult: 
         """
         Applies payment and tracks unpaid portion.
         """
-        available_revenue_funds = payment_context.available_revenue_collections
+        available_cash = payment_context.available_cash
         pool_balance = payment_context.pool_balance
 
         due = self.amount_due(pool_balance, period)
-        paid = min(available_revenue_funds, due)
+        paid = min(available_cash, due)
         unpaid = due - paid
 
         payment_run_return_payload = {
             'amount_due': due,
-            'revenue_funds_distributed' : paid,
-            'revenue_amount_unpaid' : unpaid,
+            'amount_paid' : paid,
+            'amount_unpaid' : unpaid,
         }
                
-        return ApplyRevenueDueResult(**payment_run_return_payload)
-    
+        return ApplyAmountDueResult(**payment_run_return_payload)
 
     ### UPDATES 
     def update_history_revenue_distributions(self, period: int, due: float, paid: float, unpaid: float):

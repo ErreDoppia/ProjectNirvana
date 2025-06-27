@@ -1,7 +1,7 @@
 
 import unittest
 from waterfall_engine.tranche import Tranche
-from waterfall_engine.models import PaymentContext, RedemptionProcessor
+from waterfall_engine.models import PaymentContext, RawPaymentContext, WaterfallProcessor
 
 
 class TestInterestCalcs(unittest.TestCase):
@@ -45,9 +45,10 @@ class TestInterestCalcs(unittest.TestCase):
         self.assertAlmostEqual(result, expected)
 
     def test_update_last_period_paid_and_unpaid_interest(self):
+        due = 10e3
         paid = 10e3
         unpaid = 0
-        self.tranche.update_last_paid_and_last_unpaid_interest(paid, unpaid)
+        self.tranche.update_last_paid_and_last_unpaid_interest(due, paid, unpaid)
 
         result1 = self.tranche.last_period_paid_interest
         result2 = self.tranche.last_period_unpaid_interest
@@ -71,13 +72,13 @@ class TestInterestCalcs(unittest.TestCase):
         temp_tranche.update_total_paid_and_total_unpaid_interest(10e3, 10e3)
         result = temp_tranche.last_period_paid_interest
 
-        self.assertAlmostEqual(temp_tranche.total_paid_interest,10e3)
-        self.assertAlmostEqual(temp_tranche.total_unpaid_interest,10e3)
+        self.assertAlmostEqual(temp_tranche._total_paid_interest,10e3)
+        self.assertAlmostEqual(temp_tranche._total_unpaid_interest,10e3)
         self.assertAlmostEqual(result,0)
 
     def test_current_interest_accrued_on_arrears(self):
         """Test interest accrued on unpaid interest (arrears) from previous period."""
-        self.tranche.update_last_paid_and_last_unpaid_interest(1.5e6, 0.5e6)
+        self.tranche.update_last_paid_and_last_unpaid_interest(2e6, 1.5e6, 0.5e6)
         result = self.tranche.current_interest_on_last_period_unpaid_interest(1)
         expected = round(500e3 * (0.02 + 0.06) / 4, 2)
         self.assertAlmostEqual(result, expected)
@@ -87,7 +88,7 @@ class TestInterestCalcs(unittest.TestCase):
         Test total interest due: current interest + prior arrears + 
         interest on arrears (no step-up).
         """
-        self.tranche.update_last_paid_and_last_unpaid_interest(1.5e6, 0.5e6)
+        self.tranche.update_last_paid_and_last_unpaid_interest(2e6, 1.5e6, 0.5e6)
         result = self.tranche.current_total_interest_due(1)
 
         current_interest_due = round(100e6 * (0.02 + 0.06) / 4, 2)
@@ -101,7 +102,7 @@ class TestInterestCalcs(unittest.TestCase):
         """
         Test total interest due including step-up margin (after step-up date).
         """
-        self.tranche.update_last_paid_and_last_unpaid_interest(1.5e6, 0.5e6)
+        self.tranche.update_last_paid_and_last_unpaid_interest(2e6, 1.5e6, 0.5e6)
         result = self.tranche.current_total_interest_due(36)
 
         current_interest_due = round(100e6 * (0.02 + 0.1) / 4, 2)
@@ -148,7 +149,7 @@ class TestPrincipalCalcs(unittest.TestCase):
         self.assertAlmostEqual(result1, expected1)
 
         # Simulate a principal repayment of 10M
-        self.tranche.update_last_period_ending_balance(90e6)
+        self.tranche.update_last_period_principal(10e6, 90e6)
 
         result2 = self.tranche.last_period_ending_balance
         expected2 = 90e6
@@ -180,9 +181,18 @@ class TestTrancheIntegration(unittest.TestCase):
         
         # Simulated payment context for 3 periods
         payment_context = [
-            PaymentContext(available_redemption_collections=5e6, available_revenue_collections=0.0, pool_balance=10e6, principal_allocations={"test_tranche": 5e6}, revenue_collections=0.0, redemption_collections=0.0,),
-            PaymentContext(available_redemption_collections=2.5e6, available_revenue_collections=0.0, pool_balance=10e6, principal_allocations={"test_tranche": 2.5e6}, revenue_collections=0.0, redemption_collections=0.0,),
-            PaymentContext(available_redemption_collections=2.5e6, available_revenue_collections=0.0, pool_balance=10e6, principal_allocations={"test_tranche": 2.5e6}, revenue_collections=0.0, redemption_collections=0.0,)
+            PaymentContext(
+                RawPaymentContext(redemption_collections=5e6, revenue_collections=0.0, pool_balance=10e6), 
+                principal_allocations={"test_tranche": 5e6}, available_cash=5e6, 
+                last_period_liquidity_reserve_balance=0.0, last_period_tranche_ending_balance_total=0.0),
+            PaymentContext(
+                RawPaymentContext(redemption_collections=2.5e6, revenue_collections=0.0, pool_balance=10e6), 
+                principal_allocations={"test_tranche": 2.5e6}, available_cash=2.5e6, 
+                last_period_liquidity_reserve_balance=0.0, last_period_tranche_ending_balance_total=0.0),
+            PaymentContext(
+                RawPaymentContext(redemption_collections=2.5e6, revenue_collections=0.0, pool_balance=10e6), 
+                principal_allocations={"test_tranche": 2.5e6}, available_cash=2.5e6, 
+                last_period_liquidity_reserve_balance=0.0, last_period_tranche_ending_balance_total=0.0)
         ]
         
         initial_balance = 10e6
@@ -192,23 +202,23 @@ class TestTrancheIntegration(unittest.TestCase):
         for i, pmt_cntx in enumerate(payment_context, 1):
             # Run the redemption process for the period
 
-            payment_run = self.tranche.apply_redemption_due(pmt_cntx, i)
-            paid = payment_run.get('redemption_funds_distributed')
-            unpaid = payment_run.get('redemption_amount_unpaid')
+            payment_run = self.tranche.apply_amount_due(pmt_cntx, i, 'redemption')
+            paid = payment_run.get('amount_paid')
+            unpaid = payment_run.get('amount_unpaid')
             self.tranche.update_history_redemption_distributions(i, paid, unpaid)
-            self.tranche.update_last_period_ending_balance(unpaid)
+            self.tranche.update_last_period_principal(paid, unpaid)
 
             # Construct expected output for the history
             exp_history = {
                 'period': i,
                 'last_period_ending_balance': initial_balance,
-                'current_period_repayments': pmt_cntx.available_redemption_collections,
-                'current_period_ending_balance': initial_balance - pmt_cntx.available_redemption_collections
+                'current_period_repayments': pmt_cntx.available_cash,
+                'current_period_ending_balance': initial_balance - pmt_cntx.available_cash
             }
             expected.append(exp_history)
 
             # Update balance for next iteration
-            initial_balance -= pmt_cntx.available_redemption_collections
+            initial_balance -= pmt_cntx.available_cash
             
 
         result = self.tranche.history_principal
@@ -232,9 +242,15 @@ class TestTrancheIntegration(unittest.TestCase):
         """
         # Simulated payment context for 3 periods
         payment_context = [
-            PaymentContext(available_revenue_collections=200e3, available_redemption_collections=0.0, pool_balance=10e6, revenue_collections=0.0, redemption_collections=0.0,),
-            PaymentContext(available_revenue_collections=100e3, available_redemption_collections=0.0, pool_balance=10e6, revenue_collections=0.0, redemption_collections=0.0,),
-            PaymentContext(available_revenue_collections=500e3, available_redemption_collections=0.0, pool_balance=10e6, revenue_collections=0.0, redemption_collections=0.0,)
+            PaymentContext(
+                RawPaymentContext(revenue_collections=200e3, redemption_collections=0.0, pool_balance=10e6),
+                available_cash=200e3,last_period_liquidity_reserve_balance=0.0, last_period_tranche_ending_balance_total=0.0),
+            PaymentContext(
+                RawPaymentContext(revenue_collections=100e3, redemption_collections=0.0, pool_balance=10e6), 
+                available_cash=100e3, last_period_liquidity_reserve_balance=0.0, last_period_tranche_ending_balance_total=0.0),
+            PaymentContext(
+                RawPaymentContext(revenue_collections=500e3, redemption_collections=0.0, pool_balance=10e6), 
+                available_cash=500e3, last_period_liquidity_reserve_balance=0.0, last_period_tranche_ending_balance_total=0.0)
         ]
 
         exp_due = round ( 10e6 * (0.06 + 0.02) / 4 , 2 )
@@ -245,13 +261,13 @@ class TestTrancheIntegration(unittest.TestCase):
         expected = []
 
         for i, pmt_cntx in enumerate(payment_context, 1):
-            payment_run = self.tranche.apply_revenue_due(pmt_cntx, i)
+            payment_run = self.tranche.apply_amount_due(payment_context=pmt_cntx, period=i, waterfall_type='revenue')
             due = self.tranche.current_total_interest_due(i)
-            paid = payment_run.get('revenue_funds_distributed')
-            unpaid = payment_run.get('revenue_amount_unpaid')
+            paid = payment_run.get('amount_paid')
+            unpaid = payment_run.get('amount_unpaid')
 
             self.tranche.update_history_revenue_distributions(i, due, paid, unpaid)
-            self.tranche.update_last_paid_and_last_unpaid_interest(paid, unpaid)
+            self.tranche.update_last_paid_and_last_unpaid_interest(due, paid, unpaid)
 
             j = i-1
 
@@ -267,8 +283,8 @@ class TestTrancheIntegration(unittest.TestCase):
                 'last_period_unpaid_interest': last_unp,
                 'interest_on_last_period_unpaid_interest': int_on_last_unp_unt,
                 'total_interest_due': tot_int_due, 
-                'current_period_distribution': min(tot_int_due, pmt_cntx.available_revenue_collections), 
-                'current_period_unpaid_interest': max(tot_int_due - pmt_cntx.available_revenue_collections, 0)
+                'current_period_distribution': min(tot_int_due, pmt_cntx.available_cash), 
+                'current_period_unpaid_interest': max(tot_int_due - pmt_cntx.available_cash, 0)
             })
 
             expected.append(exp_history)

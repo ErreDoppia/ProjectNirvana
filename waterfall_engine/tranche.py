@@ -2,8 +2,8 @@
 from typing import cast
 from .settings import FREQ_MULTIPLIER
 from .calculations import InterestAmountCalculation
-from .models import ApplyRevenueDueResult, ApplyRedemptionDueResult, PaymentContext
-
+from .models import PaymentContext
+from .models import ApplyAmountDueResult
 
 ### TRANCHE CLASS ###
 class Tranche:
@@ -235,12 +235,18 @@ class Tranche:
         self._last_period_ending_balance = unpaid
         self._last_period_paid_principal = paid               
 
+    def apply_amount_due(self, payment_context: PaymentContext, period: int, waterfall_type: str): 
+        if waterfall_type == "revenue":
+            return self._apply_revenue_due(payment_context, period)
+        elif waterfall_type == "redemption":
+            return self._apply_redemption_due(payment_context, period)
+    
     # Distribution methods for Revenue and Redemption Waterfall limbs    
-    def apply_revenue_due(self, payment_context: PaymentContext, period: int) -> ApplyRevenueDueResult:
+    def _apply_revenue_due(self, payment_context: PaymentContext, period: int) -> ApplyAmountDueResult:
         """
         Pays interest due.
         """
-        available_revenue_funds = payment_context.available_revenue_collections
+        available_revenue_funds = payment_context.available_cash
         pool_balance = payment_context.pool_balance
 
         interest_due = self.current_total_interest_due(period)    
@@ -249,25 +255,26 @@ class Tranche:
                                                   
         payment_run_return_payload = {
             'amount_due': interest_due,
-            'revenue_funds_distributed' : revenue_funds_distributed,
-            'revenue_amount_unpaid' : interest_unpaid,
+            'amount_paid' : revenue_funds_distributed,
+            'amount_unpaid' : interest_unpaid,
         }
                 
-        return ApplyRevenueDueResult(**payment_run_return_payload)
+        return ApplyAmountDueResult(**payment_run_return_payload)
 
-    def apply_redemption_due(self, payment_context: PaymentContext, period: int) -> ApplyRedemptionDueResult:
+    def _apply_redemption_due(self, payment_context: PaymentContext, period: int) -> ApplyAmountDueResult:
         """
         Pays principal due.
         """
-        available_redemption_funds = payment_context.available_redemption_collections
+        available_redemption_funds = payment_context.available_cash
         
         principal_due = payment_context.principal_allocations.get(self.name, 0.0)
         redemption_funds_distributed = min(principal_due, available_redemption_funds)
         redemption_amount_unpaid = self.last_period_ending_balance - redemption_funds_distributed
         
         payment_run_return_payload = {
-            'redemption_funds_distributed' : redemption_funds_distributed,
-            'redemption_amount_unpaid' : redemption_amount_unpaid,
+            'amount_due': principal_due,
+            'amount_paid': redemption_funds_distributed,
+            'amount_unpaid': redemption_amount_unpaid,
         }
         
-        return ApplyRedemptionDueResult(**payment_run_return_payload)
+        return ApplyAmountDueResult(**payment_run_return_payload)
