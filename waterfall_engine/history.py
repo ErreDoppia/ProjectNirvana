@@ -1,13 +1,13 @@
 
 from .tranche import Tranche
-from .models import RedemptionWaterfallLimb, RevenueWaterfallLimb, WaterfallLimbResult
+from .models import WaterfallLimb, WaterfallLimbResult
 from .utils import get_limb_key
 
 
 class History:        
     @staticmethod
     def update_revenue_waterfall_limbs_history(
-        limbs: list[RevenueWaterfallLimb], period: int, 
+        limbs: list[WaterfallLimb], period: int, 
         revenue_results: dict[str, WaterfallLimbResult]):
         """
         Updates the relevant revenue waterfall limb history for the deal based on the revenue results.
@@ -32,6 +32,7 @@ class History:
         for i, tranche in enumerate(tranches, start=1):
             limb_key = get_limb_key(i, tranche.name)
             tranche.update_last_paid_and_last_unpaid_interest(
+                due=revenue_results.get(limb_key, {}).get('amount_due', 0.0),
                 paid=revenue_results.get(limb_key, {}).get('amount_paid', 0.0),
                 unpaid=revenue_results.get(limb_key, {}).get('amount_unpaid', 0.0)
             )
@@ -53,7 +54,7 @@ class History:
 
     @staticmethod
     def update_redemption_waterfall_limbs_history(
-        limbs: list[RevenueWaterfallLimb], period: int, 
+        limbs: list[WaterfallLimb], period: int, 
         redemption_results: dict[str, WaterfallLimbResult]):
         """
         Updates the relevant redemption waterfall limb history for the deal based on the redemption results.

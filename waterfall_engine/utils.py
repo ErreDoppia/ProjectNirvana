@@ -1,7 +1,7 @@
 
 from math import isclose
 
-from .models import RawPaymentContext
+from .models import PaymentContext
 
 def ensure_weights_sum_to_one(weights: dict[str, float]) -> None:
     """
@@ -16,5 +16,5 @@ def ensure_weights_sum_to_one(weights: dict[str, float]) -> None:
 def get_limb_key(i: int, name: str) -> str:
     return f"{i} - {name}"
 
-def get_watefall(waterfall_type: str, payment_context: RawPaymentContext):
+def get_watefall(waterfall_type: str, payment_context: PaymentContext):
     pass

@@ -42,7 +42,7 @@ class PaymentContextPrepper:
 
         return context
      
-    def _allocate_principal(self, payment_context: RawPaymentContext) -> dict[str, float]:
+    def _allocate_principal(self, payment_context: PaymentContext) -> dict[str, float]:
         """
         Allocates principal payments based on the repayment structure of the deal.
         Returns a dictionary of principal allocations per tranche.

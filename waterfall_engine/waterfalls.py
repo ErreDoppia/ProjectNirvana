@@ -1,5 +1,5 @@
  
-from .models import RawPaymentContext, WaterfallLimbResult
+from .models import PaymentContext, WaterfallLimbResult
 from .models import WaterfallLimb, WaterfallLimbResult, WaterfallProcessor
 from .context import PaymentContextHandler 
 
@@ -15,7 +15,7 @@ class WaterfallCalculator:
         """
         self.limbs = waterfall_limbs
        
-    def flush(self, payment_context: RawPaymentContext, period: int, waterfall_type: str) -> dict[str, WaterfallLimbResult]:
+    def flush(self, payment_context: PaymentContext, period: int, waterfall_type: str) -> dict[str, WaterfallLimbResult]:
         """
         Applies collections to each limb by priority.
         """
